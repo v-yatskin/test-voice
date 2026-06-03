@@ -77,8 +77,23 @@
   .model-choice:hover { border-color:var(--accent); color:var(--accent); }
   .model-choice.active { border-color:var(--accent); color:var(--accent); background:rgba(0,229,255,0.08); }
   .model-choice.loaded { border-color:var(--success); color:var(--success); background:rgba(0,229,165,0.08); }
+  .model-choice:disabled { opacity:0.35; cursor:not-allowed; }
   .model-ready { display:none; align-items:center; gap:8px; font-size:0.72rem; color:var(--success); }
   .model-ready.visible { display:flex; }
+
+  /* Backend (WASM / WebGPU) toggle */
+  .backend-bar {
+    display:flex; gap:4px; margin-bottom:12px; background:var(--bg);
+    border:1px solid var(--border); border-radius:4px; padding:3px;
+  }
+  .backend-btn {
+    flex:1; padding:6px 0; background:transparent; border:none; cursor:pointer;
+    font-family:'JetBrains Mono',monospace; font-size:0.66rem; letter-spacing:0.08em;
+    text-transform:uppercase; color:var(--muted); border-radius:3px; transition:all 0.2s;
+  }
+  .backend-btn.active { background:rgba(0,229,255,0.1); color:var(--accent); }
+  .backend-btn:disabled { opacity:0.35; cursor:not-allowed; }
+  .backend-btn .badge { font-size:0.55rem; opacity:0.7; margin-left:4px; letter-spacing:0.04em; }
 
   /* Status bar */
   .status-bar {
@@ -194,10 +209,15 @@
 <div class="whisper-panel" id="whisperPanel">
   <div class="whisper-inner">
     <div class="whisper-title">Local model</div>
+    <div class="backend-bar">
+      <button class="backend-btn active" id="btnWasm" onclick="setDevice('wasm')">WASM <span class="badge">CPU</span></button>
+      <button class="backend-btn"        id="btnWebgpu" onclick="setDevice('webgpu')">WebGPU <span class="badge">GPU</span></button>
+    </div>
     <div class="model-selector">
-      <button class="model-choice active" data-model="onnx-community/whisper-tiny"  data-size="~40 MB"  onclick="selectModel(this)">tiny</button>
-      <button class="model-choice"        data-model="onnx-community/whisper-base"  data-size="~80 MB"  onclick="selectModel(this)">base</button>
-      <button class="model-choice"        data-model="onnx-community/whisper-small" data-size="~180 MB" onclick="selectModel(this)">small</button>
+      <button class="model-choice active" data-model="onnx-community/whisper-tiny"            data-size="~40 MB"  onclick="selectModel(this)">tiny</button>
+      <button class="model-choice"        data-model="onnx-community/whisper-base"            data-size="~80 MB"  onclick="selectModel(this)">base</button>
+      <button class="model-choice"        data-model="onnx-community/whisper-small"           data-size="~180 MB" onclick="selectModel(this)">small</button>
+      <button class="model-choice"        data-model="onnx-community/whisper-large-v3-turbo"  data-size="~600 MB" data-webgpu-only="1" onclick="selectModel(this)">turbo</button>
     </div>
     <div class="model-info">
       <div>
@@ -287,13 +307,16 @@ let recognition    = null;
 let whisperPipe    = null;
 let whisperLoading = false;
 let selectedModel  = 'onnx-community/whisper-tiny';
-let loadedModels   = {}; // cache: modelId -> pipeline
+let selectedDevice = 'wasm';     // 'wasm' | 'webgpu'
+let loadedModels   = {}; // cache: `${modelId}::${device}` -> pipeline
 let mediaRecorder  = null;
 let audioChunks    = [];
 
 const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 const isIOS    = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 const SR       = window.SpeechRecognition || window.webkitSpeechRecognition;
+const webgpuSupported = typeof navigator !== 'undefined' && !!navigator.gpu;
+const cacheKey = (model, device) => `${model}::${device}`;
 
 // ── DOM ──────────────────────────────────────────────────────────
 const chatWindow   = document.getElementById('chatWindow');
@@ -316,6 +339,7 @@ const modelReady   = document.getElementById('modelReady');
 window.setMode = setMode;
 window.loadWhisperModel = loadWhisperModel;
 window.selectModel = selectModel;
+window.setDevice = setDevice;
 
 // ── UI helpers ───────────────────────────────────────────────────
 function setStatus(state, label) {
@@ -343,14 +367,15 @@ function setMode(mode) {
   if (mode === 'webkit' && !SR) {
     browserNote.textContent = '⚠ WebKit STT not supported — use Chrome/Edge/Safari on HTTPS';
     browserNote.style.color = 'var(--danger)';
+    updateMicState();
   } else if (mode === 'webkit') {
     browserNote.textContent = isSafari ? 'Safari: HTTPS required for STT' : 'Chrome/Edge: audio sent to Google';
     browserNote.style.color = '';
+    updateMicState();
   } else {
-    browserNote.textContent = whisperPipe ? 'Model loaded — fully local' : 'Download model to enable local STT';
-    browserNote.style.color = whisperPipe ? 'var(--success)' : '';
+    // Whisper mode — defer to refreshModelUI so the note reflects device + load state
+    refreshModelUI();
   }
-  updateMicState();
 }
 
 function updateMicState() {
@@ -483,26 +508,59 @@ function stopWebkit() {
 // WHISPER WASM
 // ══════════════════════════════════════════════════════════════════
 function selectModel(btn) {
-  // Don't allow switching while loading
-  if (whisperLoading) return;
+  // Don't allow switching while loading, or if disabled (e.g. turbo on WASM)
+  if (whisperLoading || btn.disabled) return;
   document.querySelectorAll('.model-choice').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   selectedModel = btn.dataset.model;
   const size = btn.dataset.size;
   document.getElementById('modelName').textContent = selectedModel;
   document.getElementById('modelSizeLabel').textContent = size + ' · q4 quantized · multilingual';
+  refreshModelUI();
+}
 
-  // Check if already loaded
-  if (loadedModels[selectedModel]) {
-    whisperPipe = loadedModels[selectedModel];
+function setDevice(device) {
+  if (whisperLoading) return;
+  if (device === 'webgpu' && !webgpuSupported) return;
+  selectedDevice = device;
+  document.getElementById('btnWasm').classList.toggle('active', device === 'wasm');
+  document.getElementById('btnWebgpu').classList.toggle('active', device === 'webgpu');
+
+  // If the currently selected model is WebGPU-only and we're switching to WASM, fall back to tiny
+  const activeBtn = document.querySelector('.model-choice.active');
+  if (activeBtn && activeBtn.dataset.webgpuOnly === '1' && device !== 'webgpu') {
+    document.querySelectorAll('.model-choice').forEach(b => b.classList.remove('active'));
+    const tinyBtn = document.querySelector('.model-choice[data-model="onnx-community/whisper-tiny"]');
+    tinyBtn.classList.add('active');
+    selectedModel = tinyBtn.dataset.model;
+    document.getElementById('modelName').textContent = selectedModel;
+    document.getElementById('modelSizeLabel').textContent = tinyBtn.dataset.size + ' · q4 quantized · multilingual';
+  }
+  refreshModelUI();
+}
+
+function refreshModelUI() {
+  // Sync per-button "loaded" and disabled state to the current device
+  document.querySelectorAll('.model-choice').forEach(b => {
+    b.classList.toggle('loaded', !!loadedModels[cacheKey(b.dataset.model, selectedDevice)]);
+    if (b.dataset.webgpuOnly === '1') {
+      b.disabled = (selectedDevice !== 'webgpu');
+      b.title = b.disabled ? 'Requires WebGPU backend' : '';
+    }
+  });
+
+  // Sync the active-model panel (ready vs. needs-download)
+  const key = cacheKey(selectedModel, selectedDevice);
+  const deviceLabel = selectedDevice === 'webgpu' ? 'WebGPU' : 'WASM';
+  if (loadedModels[key]) {
+    whisperPipe = loadedModels[key];
     modelReady.classList.add('visible');
-    document.getElementById('modelReadyLabel').textContent = selectedModel.split('/')[1] + ' loaded ✓';
+    document.getElementById('modelReadyLabel').textContent = `${selectedModel.split('/')[1]} loaded ✓ (${deviceLabel})`;
     downloadBtn.style.display = 'none';
     progressLabel.textContent = '';
     progressWrap.style.display = 'none';
-    browserNote.textContent = 'Model loaded — fully local';
+    browserNote.textContent = `Model loaded — fully local (${deviceLabel})`;
     browserNote.style.color = 'var(--success)';
-    updateMicState();
   } else {
     whisperPipe = null;
     modelReady.classList.remove('visible');
@@ -511,20 +569,22 @@ function selectModel(btn) {
     downloadBtn.textContent = 'Download & load';
     progressLabel.textContent = '';
     progressWrap.style.display = 'none';
-    browserNote.textContent = 'Download model to enable local STT';
+    browserNote.textContent = `Download model to enable local STT (${deviceLabel})`;
     browserNote.style.color = '';
-    updateMicState();
   }
+  updateMicState();
 }
 
 async function loadWhisperModel() {
-  if (loadedModels[selectedModel] || whisperLoading) return;
+  const key = cacheKey(selectedModel, selectedDevice);
+  if (loadedModels[key] || whisperLoading) return;
   whisperLoading = true;
   downloadBtn.disabled = true;
   downloadBtn.textContent = 'Loading...';
   progressWrap.style.display = 'block';
   progressBar.style.width = '0%';
-  progressLabel.textContent = 'Starting download...';
+  const deviceLabel = selectedDevice === 'webgpu' ? 'WebGPU' : 'WASM';
+  progressLabel.textContent = `Starting download (${deviceLabel})...`;
   setStatus('loading', 'downloading model...');
 
   try {
@@ -532,6 +592,7 @@ async function loadWhisperModel() {
       'automatic-speech-recognition',
       selectedModel,
       {
+        device: selectedDevice,
         dtype: { encoder_model: 'q4', decoder_model_merged: 'q4' },
         progress_callback: (p) => {
           if (p.status === 'downloading' || p.status === 'progress') {
@@ -548,19 +609,19 @@ async function loadWhisperModel() {
         }
       }
     );
-    loadedModels[selectedModel] = pipe;
+    loadedModels[key] = pipe;
     whisperPipe = pipe;
     whisperLoading = false;
     progressBar.style.width = '100%';
-    progressLabel.textContent = 'Model ready!';
+    progressLabel.textContent = `Model ready! (${deviceLabel})`;
     modelReady.classList.add('visible');
-    document.getElementById('modelReadyLabel').textContent = selectedModel.split('/')[1] + ' loaded ✓';
+    document.getElementById('modelReadyLabel').textContent = `${selectedModel.split('/')[1]} loaded ✓ (${deviceLabel})`;
     downloadBtn.style.display = 'none';
-    // Mark button as loaded
+    // Mark the active button as loaded for this device
     document.querySelectorAll('.model-choice').forEach(b => {
       if (b.dataset.model === selectedModel) b.classList.add('loaded');
     });
-    browserNote.textContent = 'Model loaded — fully local, no data sent anywhere';
+    browserNote.textContent = `Model loaded — fully local, no data sent anywhere (${deviceLabel})`;
     browserNote.style.color = 'var(--success)';
     setStatus('idle', 'ready');
     updateMicState();
@@ -740,6 +801,15 @@ voiceToggle.addEventListener('click', () => {
 speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
 
 // ── Init ─────────────────────────────────────────────────────────
+// WebGPU detection — disable the button if unsupported, default to it when available
+if (!webgpuSupported) {
+  const btn = document.getElementById('btnWebgpu');
+  btn.disabled = true;
+  btn.title = 'WebGPU not supported in this browser (Safari/Firefox)';
+} else {
+  setDevice('webgpu');
+}
+refreshModelUI();
 setMode('webkit');
 setStatus('idle', 'ready');
 </script>
