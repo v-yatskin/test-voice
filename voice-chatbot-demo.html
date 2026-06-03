@@ -67,6 +67,16 @@
   .progress-wrap { height:3px; background:var(--border); border-radius:2px; overflow:hidden; }
   .progress-bar { height:100%; background:var(--accent); width:0%; transition:width 0.2s; border-radius:2px; }
   .progress-label { font-size:0.65rem; color:var(--muted); margin-top:6px; }
+  .model-selector { display:flex; gap:6px; margin-bottom:12px; }
+  .model-choice {
+    flex:1; padding:6px 0; background:transparent; border:1px solid var(--border);
+    color:var(--muted); font-family:'JetBrains Mono',monospace; font-size:0.72rem;
+    text-transform:uppercase; letter-spacing:0.08em; cursor:pointer; border-radius:4px;
+    transition:all 0.2s;
+  }
+  .model-choice:hover { border-color:var(--accent); color:var(--accent); }
+  .model-choice.active { border-color:var(--accent); color:var(--accent); background:rgba(0,229,255,0.08); }
+  .model-choice.loaded { border-color:var(--success); color:var(--success); background:rgba(0,229,165,0.08); }
   .model-ready { display:none; align-items:center; gap:8px; font-size:0.72rem; color:var(--success); }
   .model-ready.visible { display:flex; }
 
@@ -184,16 +194,21 @@
 <div class="whisper-panel" id="whisperPanel">
   <div class="whisper-inner">
     <div class="whisper-title">Local model</div>
+    <div class="model-selector">
+      <button class="model-choice active" data-model="onnx-community/whisper-tiny"  data-size="~40 MB"  onclick="selectModel(this)">tiny</button>
+      <button class="model-choice"        data-model="onnx-community/whisper-base"  data-size="~80 MB"  onclick="selectModel(this)">base</button>
+      <button class="model-choice"        data-model="onnx-community/whisper-small" data-size="~180 MB" onclick="selectModel(this)">small</button>
+    </div>
     <div class="model-info">
       <div>
-        <div class="model-name">whisper-tiny (multilingual)</div>
-        <div class="model-size">~40 MB · q4 quantized · supports Ukrainian</div>
+        <div class="model-name" id="modelName">onnx-community/whisper-tiny</div>
+        <div class="model-size" id="modelSizeLabel">~40 MB · q4 quantized · multilingual</div>
       </div>
       <button class="download-btn" id="downloadBtn" onclick="loadWhisperModel()">Download & load</button>
     </div>
     <div class="model-ready" id="modelReady">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-      Model loaded — ready for local inference
+      <span id="modelReadyLabel">Model loaded — ready for local inference</span>
     </div>
     <div class="progress-wrap" id="progressWrap" style="display:none">
       <div class="progress-bar" id="progressBar"></div>
@@ -271,6 +286,8 @@ let ttsEnabled     = true;
 let recognition    = null;
 let whisperPipe    = null;
 let whisperLoading = false;
+let selectedModel  = 'onnx-community/whisper-tiny';
+let loadedModels   = {}; // cache: modelId -> pipeline
 let mediaRecorder  = null;
 let audioChunks    = [];
 
@@ -298,6 +315,7 @@ const modelReady   = document.getElementById('modelReady');
 // ── Expose globals for onclick ───────────────────────────────────
 window.setMode = setMode;
 window.loadWhisperModel = loadWhisperModel;
+window.selectModel = selectModel;
 
 // ── UI helpers ───────────────────────────────────────────────────
 function setStatus(state, label) {
@@ -464,19 +482,55 @@ function stopWebkit() {
 // ══════════════════════════════════════════════════════════════════
 // WHISPER WASM
 // ══════════════════════════════════════════════════════════════════
+function selectModel(btn) {
+  // Don't allow switching while loading
+  if (whisperLoading) return;
+  document.querySelectorAll('.model-choice').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  selectedModel = btn.dataset.model;
+  const size = btn.dataset.size;
+  document.getElementById('modelName').textContent = selectedModel;
+  document.getElementById('modelSizeLabel').textContent = size + ' · q4 quantized · multilingual';
+
+  // Check if already loaded
+  if (loadedModels[selectedModel]) {
+    whisperPipe = loadedModels[selectedModel];
+    modelReady.classList.add('visible');
+    document.getElementById('modelReadyLabel').textContent = selectedModel.split('/')[1] + ' loaded ✓';
+    downloadBtn.style.display = 'none';
+    progressLabel.textContent = '';
+    progressWrap.style.display = 'none';
+    browserNote.textContent = 'Model loaded — fully local';
+    browserNote.style.color = 'var(--success)';
+    updateMicState();
+  } else {
+    whisperPipe = null;
+    modelReady.classList.remove('visible');
+    downloadBtn.style.display = '';
+    downloadBtn.disabled = false;
+    downloadBtn.textContent = 'Download & load';
+    progressLabel.textContent = '';
+    progressWrap.style.display = 'none';
+    browserNote.textContent = 'Download model to enable local STT';
+    browserNote.style.color = '';
+    updateMicState();
+  }
+}
+
 async function loadWhisperModel() {
-  if (whisperPipe || whisperLoading) return;
+  if (loadedModels[selectedModel] || whisperLoading) return;
   whisperLoading = true;
   downloadBtn.disabled = true;
   downloadBtn.textContent = 'Loading...';
   progressWrap.style.display = 'block';
+  progressBar.style.width = '0%';
   progressLabel.textContent = 'Starting download...';
   setStatus('loading', 'downloading model...');
 
   try {
-    whisperPipe = await pipeline(
+    const pipe = await pipeline(
       'automatic-speech-recognition',
-      'onnx-community/whisper-tiny',
+      selectedModel,
       {
         dtype: { encoder_model: 'q4', decoder_model_merged: 'q4' },
         progress_callback: (p) => {
@@ -494,10 +548,18 @@ async function loadWhisperModel() {
         }
       }
     );
+    loadedModels[selectedModel] = pipe;
+    whisperPipe = pipe;
+    whisperLoading = false;
     progressBar.style.width = '100%';
     progressLabel.textContent = 'Model ready!';
     modelReady.classList.add('visible');
+    document.getElementById('modelReadyLabel').textContent = selectedModel.split('/')[1] + ' loaded ✓';
     downloadBtn.style.display = 'none';
+    // Mark button as loaded
+    document.querySelectorAll('.model-choice').forEach(b => {
+      if (b.dataset.model === selectedModel) b.classList.add('loaded');
+    });
     browserNote.textContent = 'Model loaded — fully local, no data sent anywhere';
     browserNote.style.color = 'var(--success)';
     setStatus('idle', 'ready');
@@ -513,20 +575,64 @@ async function loadWhisperModel() {
   }
 }
 
+// VAD config
+const VAD_SILENCE_MS   = 1500;  // stop after 1.5s of silence
+const VAD_SPEECH_DB    = -45;   // dB threshold to detect speech start
+const VAD_SILENCE_DB   = -55;   // dB threshold for silence
+const VAD_MIN_SPEECH_MS = 300;  // ignore clips shorter than this
+
+let silenceTimer  = null;
+let analyser      = null;
+let vadFrame      = null;
+let speechStarted = false;
+let activeStream  = null;
+
+function dbFromAnalyser() {
+  const buf = new Uint8Array(analyser.fftSize);
+  analyser.getByteTimeDomainData(buf);
+  let sum = 0;
+  for (let i = 0; i < buf.length; i++) {
+    const s = (buf[i] - 128) / 128;
+    sum += s * s;
+  }
+  const rms = Math.sqrt(sum / buf.length);
+  return rms > 0 ? 20 * Math.log10(rms) : -Infinity;
+}
+
 async function startWhisper() {
   if (!whisperPipe || isListening) return;
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  activeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   audioChunks = [];
-  mediaRecorder = new MediaRecorder(stream);
+
+  // Set up analyser for VAD
+  const audioCtxVad = new AudioContext();
+  const source = audioCtxVad.createMediaStreamSource(activeStream);
+  analyser = audioCtxVad.createAnalyser();
+  analyser.fftSize = 2048;
+  source.connect(analyser);
+
+  mediaRecorder = new MediaRecorder(activeStream);
   mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
   mediaRecorder.onstop = async () => {
-    stream.getTracks().forEach(t => t.stop());
+    cancelAnimationFrame(vadFrame);
+    clearTimeout(silenceTimer);
+    activeStream.getTracks().forEach(t => t.stop());
+    audioCtxVad.close();
+
+    if (audioChunks.length === 0) {
+      setStatus('idle', 'ready');
+      micBtn.classList.remove('active');
+      isListening = false;
+      return;
+    }
+
     setStatus('loading', 'transcribing...');
     micBtn.classList.remove('active');
+    isListening = false;
+
     try {
       const blob = new Blob(audioChunks, { type: 'audio/webm' });
       const arrayBuffer = await blob.arrayBuffer();
-      // Decode audio to float32 at 16kHz for Whisper
       const audioCtx = new AudioContext({ sampleRate: 16000 });
       const decoded = await audioCtx.decodeAudioData(arrayBuffer);
       const float32 = decoded.getChannelData(0);
@@ -544,16 +650,63 @@ async function startWhisper() {
       setStatus('idle', 'transcription failed');
     }
   };
+
   mediaRecorder.start();
   isListening = true;
+  speechStarted = false;
   micBtn.classList.add('active');
-  setStatus('listening', 'recording...');
+  setStatus('listening', 'waiting for speech...');
+
+  // VAD loop
+  const recordStart = Date.now();
+  function vadTick() {
+    if (!isListening) return;
+    const db = dbFromAnalyser();
+
+    if (!speechStarted) {
+      if (db > VAD_SPEECH_DB) {
+        speechStarted = true;
+        setStatus('listening', 'recording...');
+        interimEl.textContent = '🎙';
+      }
+    } else {
+      if (db < VAD_SILENCE_DB) {
+        // Silence detected — start/reset countdown
+        if (!silenceTimer) {
+          silenceTimer = setTimeout(() => {
+            const elapsed = Date.now() - recordStart;
+            if (elapsed > VAD_MIN_SPEECH_MS) stopWhisper();
+            else {
+              // Too short, keep going
+              silenceTimer = null;
+              speechStarted = false;
+              setStatus('listening', 'waiting for speech...');
+              interimEl.textContent = '';
+            }
+          }, VAD_SILENCE_MS);
+        }
+      } else {
+        // Sound again — cancel silence countdown
+        if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+        interimEl.textContent = '🎙';
+      }
+    }
+    vadFrame = requestAnimationFrame(vadTick);
+  }
+  vadFrame = requestAnimationFrame(vadTick);
 }
 
 function stopWhisper() {
+  clearTimeout(silenceTimer);
+  silenceTimer = null;
+  cancelAnimationFrame(vadFrame);
+  interimEl.textContent = '';
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     mediaRecorder.stop();
+  } else {
     isListening = false;
+    micBtn.classList.remove('active');
+    setStatus('idle', 'ready');
   }
 }
 
