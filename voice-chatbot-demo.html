@@ -1,338 +1,163 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="uk">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Voice Chatbot Demo</title>
+<title>VoiceBot Demo</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
   :root {
-    --bg: #0a0c10;
-    --surface: #111318;
-    --border: #1e2229;
-    --accent: #00e5ff;
-    --accent2: #7c4dff;
-    --text: #e8eaf0;
-    --muted: #4a5060;
-    --user-bg: #0d1f2d;
-    --bot-bg: #13101f;
-    --danger: #ff3d6b;
-    --success: #00e5a0;
+    --bg: #0a0c10; --surface: #111318; --border: #1e2229;
+    --accent: #00e5ff; --accent2: #7c4dff;
+    --text: #e8eaf0; --muted: #4a5060;
+    --user-bg: #0d1f2d; --bot-bg: #13101f;
+    --danger: #ff3d6b; --success: #00e5a0; --warn: #ffb300;
   }
-
   body {
-    background: var(--bg);
-    color: var(--text);
+    background: var(--bg); color: var(--text);
     font-family: 'JetBrains Mono', monospace;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 24px 16px;
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; padding: 24px 16px;
     background-image:
       radial-gradient(ellipse 60% 40% at 70% 10%, rgba(0,229,255,0.04) 0%, transparent 60%),
       radial-gradient(ellipse 50% 50% at 20% 80%, rgba(124,77,255,0.05) 0%, transparent 60%);
   }
+  header { width:100%; max-width:680px; margin-bottom:20px; display:flex; align-items:baseline; gap:12px; }
+  header h1 { font-family:'Syne',sans-serif; font-weight:800; font-size:1.4rem; letter-spacing:-0.02em; }
+  .tag { font-size:0.65rem; font-weight:600; letter-spacing:0.12em; text-transform:uppercase;
+    color:var(--accent); border:1px solid rgba(0,229,255,0.3); padding:2px 8px; border-radius:2px; }
 
-  header {
-    width: 100%;
-    max-width: 680px;
-    margin-bottom: 24px;
-    display: flex;
-    align-items: baseline;
-    gap: 12px;
+  /* STT mode toggle */
+  .mode-bar {
+    width:100%; max-width:680px; display:flex; align-items:center; gap:8px;
+    margin-bottom:12px; background:var(--surface); border:1px solid var(--border);
+    border-radius:6px; padding:4px; position:relative;
   }
-
-  header h1 {
-    font-family: 'Syne', sans-serif;
-    font-weight: 800;
-    font-size: 1.4rem;
-    letter-spacing: -0.02em;
-    color: var(--text);
+  .mode-btn {
+    flex:1; padding:8px; border:none; background:transparent; cursor:pointer;
+    font-family:'JetBrains Mono',monospace; font-size:0.72rem; letter-spacing:0.05em;
+    text-transform:uppercase; color:var(--muted); border-radius:4px; transition:all 0.2s;
+    display:flex; align-items:center; justify-content:center; gap:6px;
   }
+  .mode-btn.active { background:rgba(0,229,255,0.1); color:var(--accent); }
+  .mode-btn svg { width:14px; height:14px; }
+  .mode-divider { width:1px; height:24px; background:var(--border); flex-shrink:0; }
 
-  header .tag {
-    font-size: 0.65rem;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--accent);
-    border: 1px solid rgba(0,229,255,0.3);
-    padding: 2px 8px;
-    border-radius: 2px;
+  /* Whisper download panel */
+  .whisper-panel {
+    width:100%; max-width:680px; margin-bottom:12px;
+    background:var(--surface); border:1px solid var(--border); border-radius:6px;
+    overflow:hidden; display:none;
   }
+  .whisper-panel.visible { display:block; }
+  .whisper-inner { padding:14px 16px; }
+  .whisper-title { font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:10px; }
+  .model-info { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .model-name { font-size:0.8rem; color:var(--text); }
+  .model-size { font-size:0.68rem; color:var(--muted); }
+  .download-btn {
+    padding:8px 16px; background:rgba(0,229,255,0.1); border:1px solid rgba(0,229,255,0.3);
+    color:var(--accent); font-family:'JetBrains Mono',monospace; font-size:0.72rem;
+    text-transform:uppercase; letter-spacing:0.08em; cursor:pointer; border-radius:4px;
+    transition:all 0.2s; white-space:nowrap;
+  }
+  .download-btn:hover { background:rgba(0,229,255,0.18); }
+  .download-btn:disabled { opacity:0.4; cursor:not-allowed; }
+  .progress-wrap { height:3px; background:var(--border); border-radius:2px; overflow:hidden; }
+  .progress-bar { height:100%; background:var(--accent); width:0%; transition:width 0.2s; border-radius:2px; }
+  .progress-label { font-size:0.65rem; color:var(--muted); margin-top:6px; }
+  .model-ready { display:none; align-items:center; gap:8px; font-size:0.72rem; color:var(--success); }
+  .model-ready.visible { display:flex; }
 
+  /* Status bar */
   .status-bar {
-    width: 100%;
-    max-width: 680px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 12px;
-    height: 28px;
+    width:100%; max-width:680px; display:flex; align-items:center;
+    gap:8px; margin-bottom:12px; height:28px;
   }
+  .status-dot { width:7px; height:7px; border-radius:50%; background:var(--muted); transition:all 0.3s; flex-shrink:0; }
+  .status-dot.listening { background:var(--danger); box-shadow:0 0 8px var(--danger); animation:pulse 1s infinite; }
+  .status-dot.speaking  { background:var(--accent);  box-shadow:0 0 8px var(--accent); animation:pulse 1.4s infinite; }
+  .status-dot.loading   { background:var(--warn);    box-shadow:0 0 8px var(--warn);   animation:pulse 0.8s infinite; }
+  .status-dot.idle      { background:var(--success); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+  .status-text { font-size:0.7rem; color:var(--muted); letter-spacing:0.08em; text-transform:uppercase; }
+  .interim-text { font-size:0.7rem; color:var(--accent); opacity:0.7; font-style:italic;
+    margin-left:auto; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-  .status-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--muted);
-    transition: background 0.3s, box-shadow 0.3s;
-    flex-shrink: 0;
-  }
-  .status-dot.listening { background: var(--danger); box-shadow: 0 0 8px var(--danger); animation: pulse 1s infinite; }
-  .status-dot.speaking { background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: pulse 1.4s infinite; }
-  .status-dot.idle { background: var(--success); }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-  }
-
-  .status-text {
-    font-size: 0.7rem;
-    color: var(--muted);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    transition: color 0.3s;
-  }
-
-  .interim-text {
-    font-size: 0.7rem;
-    color: var(--accent);
-    opacity: 0.7;
-    font-style: italic;
-    margin-left: auto;
-    max-width: 300px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
+  /* Chat */
   .chat-window {
-    width: 100%;
-    max-width: 680px;
-    flex: 1;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 20px;
-    min-height: 400px;
-    max-height: 55vh;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    scroll-behavior: smooth;
+    width:100%; max-width:680px; background:var(--surface);
+    border:1px solid var(--border); border-radius:8px; padding:20px;
+    min-height:320px; max-height:45vh; overflow-y:auto;
+    display:flex; flex-direction:column; gap:14px; scroll-behavior:smooth;
   }
-
-  .chat-window::-webkit-scrollbar { width: 4px; }
-  .chat-window::-webkit-scrollbar-track { background: transparent; }
-  .chat-window::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-  .message {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    animation: slideIn 0.2s ease-out;
-  }
-
-  @keyframes slideIn {
-    from { opacity: 0; transform: translateY(6px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  .message.user { align-items: flex-end; }
-  .message.bot { align-items: flex-start; }
-
-  .message-label {
-    font-size: 0.6rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--muted);
-  }
-
+  .chat-window::-webkit-scrollbar { width:4px; }
+  .chat-window::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+  .message { display:flex; flex-direction:column; gap:4px; animation:slideIn 0.2s ease-out; }
+  @keyframes slideIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+  .message.user { align-items:flex-end; }
+  .message.bot  { align-items:flex-start; }
+  .message-label { font-size:0.6rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); }
   .message-bubble {
-    max-width: 80%;
-    padding: 10px 14px;
-    border-radius: 6px;
-    font-size: 0.82rem;
-    line-height: 1.6;
+    max-width:80%; padding:10px 14px; border-radius:6px;
+    font-size:0.82rem; line-height:1.6;
   }
+  .message.user .message-bubble { background:var(--user-bg); border:1px solid rgba(0,229,255,0.15); border-bottom-right-radius:2px; }
+  .message.bot  .message-bubble { background:var(--bot-bg);  border:1px solid rgba(124,77,255,0.2); border-bottom-left-radius:2px; }
 
-  .message.user .message-bubble {
-    background: var(--user-bg);
-    border: 1px solid rgba(0,229,255,0.15);
-    color: var(--text);
-    border-bottom-right-radius: 2px;
-  }
-
-  .message.bot .message-bubble {
-    background: var(--bot-bg);
-    border: 1px solid rgba(124,77,255,0.2);
-    color: var(--text);
-    border-bottom-left-radius: 2px;
-  }
-
-  .controls {
-    width: 100%;
-    max-width: 680px;
-    margin-top: 16px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
+  /* Controls */
+  .controls { width:100%; max-width:680px; margin-top:14px; display:flex; align-items:center; gap:12px; }
   .mic-btn {
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    border: 2px solid var(--border);
-    background: var(--surface);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-    flex-shrink: 0;
-    position: relative;
-    overflow: hidden;
+    width:56px; height:56px; border-radius:50%; border:2px solid var(--border);
+    background:var(--surface); cursor:pointer; display:flex; align-items:center;
+    justify-content:center; transition:all 0.2s; flex-shrink:0; position:relative; overflow:hidden;
   }
-
   .mic-btn::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(0,229,255,0.15) 0%, transparent 70%);
-    opacity: 0;
-    transition: opacity 0.2s;
+    content:''; position:absolute; inset:0; border-radius:50%;
+    background:radial-gradient(circle,rgba(0,229,255,0.15) 0%,transparent 70%);
+    opacity:0; transition:opacity 0.2s;
   }
-
-  .mic-btn:hover::before { opacity: 1; }
-  .mic-btn:hover { border-color: var(--accent); }
-
-  .mic-btn.active {
-    border-color: var(--danger);
-    background: rgba(255,61,107,0.08);
-    animation: ringPulse 1s infinite;
-  }
-
-  @keyframes ringPulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(255,61,107,0.4); }
-    50% { box-shadow: 0 0 0 10px rgba(255,61,107,0); }
-  }
-
-  .mic-btn svg { width: 22px; height: 22px; transition: all 0.2s; }
-  .mic-btn.active svg { stroke: var(--danger); }
-
+  .mic-btn:hover::before { opacity:1; }
+  .mic-btn:hover { border-color:var(--accent); }
+  .mic-btn.active { border-color:var(--danger); background:rgba(255,61,107,0.08); animation:ringPulse 1s infinite; }
+  .mic-btn:disabled { opacity:0.35; cursor:not-allowed; }
+  @keyframes ringPulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,61,107,0.4)} 50%{box-shadow:0 0 0 10px rgba(255,61,107,0)} }
+  .mic-btn svg { width:22px; height:22px; transition:all 0.2s; }
+  .mic-btn.active svg { stroke:var(--danger); }
   .input-wrap {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    overflow: hidden;
-    transition: border-color 0.2s;
+    flex:1; display:flex; align-items:center; background:var(--surface);
+    border:1px solid var(--border); border-radius:6px; overflow:hidden; transition:border-color 0.2s;
   }
-
-  .input-wrap:focus-within { border-color: rgba(0,229,255,0.3); }
-
+  .input-wrap:focus-within { border-color:rgba(0,229,255,0.3); }
   .text-input {
-    flex: 1;
-    background: transparent;
-    border: none;
-    outline: none;
-    padding: 14px 16px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.82rem;
-    color: var(--text);
-    caret-color: var(--accent);
+    flex:1; background:transparent; border:none; outline:none;
+    padding:14px 16px; font-family:'JetBrains Mono',monospace; font-size:0.82rem;
+    color:var(--text); caret-color:var(--accent);
   }
-
-  .text-input::placeholder { color: var(--muted); }
-
+  .text-input::placeholder { color:var(--muted); }
   .send-btn {
-    background: transparent;
-    border: none;
-    border-left: 1px solid var(--border);
-    padding: 0 16px;
-    height: 100%;
-    cursor: pointer;
-    color: var(--muted);
-    display: flex;
-    align-items: center;
-    transition: color 0.2s, background 0.2s;
+    background:transparent; border:none; border-left:1px solid var(--border);
+    padding:0 16px; height:100%; cursor:pointer; color:var(--muted);
+    display:flex; align-items:center; transition:color 0.2s,background 0.2s;
   }
-  .send-btn:hover { color: var(--accent); background: rgba(0,229,255,0.05); }
-  .send-btn svg { width: 18px; height: 18px; }
+  .send-btn:hover { color:var(--accent); background:rgba(0,229,255,0.05); }
+  .send-btn svg { width:18px; height:18px; }
 
-  .voice-toggle {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.65rem;
-    color: var(--muted);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .toggle-switch {
-    width: 32px;
-    height: 18px;
-    background: var(--border);
-    border-radius: 9px;
-    position: relative;
-    transition: background 0.2s;
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-
-  .toggle-switch.on { background: rgba(0,229,255,0.3); }
-
-  .toggle-switch::after {
-    content: '';
-    position: absolute;
-    width: 12px;
-    height: 12px;
-    background: var(--muted);
-    border-radius: 50%;
-    top: 3px;
-    left: 3px;
-    transition: transform 0.2s, background 0.2s;
-  }
-
-  .toggle-switch.on::after { transform: translateX(14px); background: var(--accent); }
-
+  /* Footer */
   .footer-row {
-    width: 100%;
-    max-width: 680px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-top: 10px;
-    padding: 0 2px;
+    width:100%; max-width:680px; display:flex; align-items:center;
+    justify-content:space-between; margin-top:10px; padding:0 2px;
   }
-
-  .browser-note {
-    font-size: 0.62rem;
-    color: var(--muted);
-    letter-spacing: 0.05em;
-  }
-
-  .no-support {
-    color: var(--danger);
-    font-size: 0.75rem;
-    padding: 12px;
-    border: 1px solid rgba(255,61,107,0.3);
-    border-radius: 6px;
-    background: rgba(255,61,107,0.05);
-  }
+  .browser-note { font-size:0.62rem; color:var(--muted); letter-spacing:0.05em; }
+  .voice-toggle { display:flex; align-items:center; gap:6px; font-size:0.65rem;
+    color:var(--muted); letter-spacing:0.08em; text-transform:uppercase; cursor:pointer; user-select:none; }
+  .toggle-switch { width:32px; height:18px; background:var(--border); border-radius:9px;
+    position:relative; transition:background 0.2s; cursor:pointer; flex-shrink:0; }
+  .toggle-switch.on { background:rgba(0,229,255,0.3); }
+  .toggle-switch::after { content:''; position:absolute; width:12px; height:12px;
+    background:var(--muted); border-radius:50%; top:3px; left:3px; transition:transform 0.2s,background 0.2s; }
+  .toggle-switch.on::after { transform:translateX(14px); background:var(--accent); }
 </style>
 </head>
 <body>
@@ -342,50 +167,90 @@
   <span class="tag">Demo</span>
 </header>
 
+<!-- STT Mode toggle -->
+<div class="mode-bar">
+  <button class="mode-btn active" id="btnWebkit" onclick="setMode('webkit')">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>
+    WebKit STT
+  </button>
+  <div class="mode-divider"></div>
+  <button class="mode-btn" id="btnWhisper" onclick="setMode('whisper')">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+    Whisper WASM
+  </button>
+</div>
+
+<!-- Whisper panel -->
+<div class="whisper-panel" id="whisperPanel">
+  <div class="whisper-inner">
+    <div class="whisper-title">Local model</div>
+    <div class="model-info">
+      <div>
+        <div class="model-name">whisper-tiny (multilingual)</div>
+        <div class="model-size">~40 MB · q4 quantized · supports Ukrainian</div>
+      </div>
+      <button class="download-btn" id="downloadBtn" onclick="loadWhisperModel()">Download & load</button>
+    </div>
+    <div class="model-ready" id="modelReady">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+      Model loaded — ready for local inference
+    </div>
+    <div class="progress-wrap" id="progressWrap" style="display:none">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+    <div class="progress-label" id="progressLabel"></div>
+  </div>
+</div>
+
+<!-- Status bar -->
 <div class="status-bar">
   <div class="status-dot idle" id="statusDot"></div>
   <span class="status-text" id="statusText">ready</span>
   <span class="interim-text" id="interimText"></span>
 </div>
 
+<!-- Chat -->
 <div class="chat-window" id="chatWindow">
   <div class="message bot">
     <span class="message-label">assistant</span>
-    <div class="message-bubble">Привіт! Я ваш голосовий асистент. Натисніть на мікрофон або введіть повідомлення. Відповідатиму текстом і голосом.</div>
+    <div class="message-bubble">Привіт! Я ваш голосовий асистент. Оберіть режим STT вгорі, натисніть мікрофон або введіть повідомлення.</div>
   </div>
 </div>
 
+<!-- Controls -->
 <div class="controls">
-  <button class="mic-btn" id="micBtn" title="Hold to speak">
-    <svg id="micIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <button class="mic-btn" id="micBtn">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
       <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-      <line x1="12" y1="19" x2="12" y2="23"/>
-      <line x1="8" y1="23" x2="16" y2="23"/>
+      <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
     </svg>
   </button>
-
   <div class="input-wrap">
-    <input class="text-input" id="textInput" type="text" placeholder="Type a message...">
+    <input class="text-input" id="textInput" type="text" placeholder="Введіть повідомлення...">
     <button class="send-btn" id="sendBtn">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="22" y1="2" x2="11" y2="13"/>
-        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
       </svg>
     </button>
   </div>
 </div>
 
 <div class="footer-row">
-  <span class="browser-note" id="browserNote">Chrome/Edge recommended for STT</span>
+  <span class="browser-note" id="browserNote"></span>
   <label class="voice-toggle">
     <div class="toggle-switch on" id="voiceToggle"></div>
     TTS
   </label>
 </div>
 
-<script>
-// ── Hardcoded bot responses ──────────────────────────────────────
+<script type="module">
+// ── Transformers.js CDN import ───────────────────────────────────
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1';
+// Cache models in browser IndexedDB
+env.allowLocalModels = false;
+
+// ── Hardcoded Ukrainian responses ────────────────────────────────
 const RESPONSES = [
   "Вітаю! Я отримав ваше повідомлення. У реальному сценарії це пішло б до вашого LLM API.",
   "Цікаво! Цей демо використовує Web Speech API як для розпізнавання мови, так і для відтворення.",
@@ -399,21 +264,40 @@ let responseIndex = 0;
 const getResponse = () => RESPONSES[responseIndex++ % RESPONSES.length];
 
 // ── State ────────────────────────────────────────────────────────
-let isListening = false;
-let isSpeaking = false;
-let ttsEnabled = true;
-let recognition = null;
+let sttMode        = 'webkit';   // 'webkit' | 'whisper'
+let isListening    = false;
+let isSpeaking     = false;
+let ttsEnabled     = true;
+let recognition    = null;
+let whisperPipe    = null;
+let whisperLoading = false;
+let mediaRecorder  = null;
+let audioChunks    = [];
 
-// ── DOM refs ─────────────────────────────────────────────────────
-const chatWindow = document.getElementById('chatWindow');
-const micBtn     = document.getElementById('micBtn');
-const textInput  = document.getElementById('textInput');
-const sendBtn    = document.getElementById('sendBtn');
-const statusDot  = document.getElementById('statusDot');
-const statusText = document.getElementById('statusText');
-const interimEl  = document.getElementById('interimText');
-const voiceToggle = document.getElementById('voiceToggle');
-const browserNote = document.getElementById('browserNote');
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+const isIOS    = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const SR       = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+// ── DOM ──────────────────────────────────────────────────────────
+const chatWindow   = document.getElementById('chatWindow');
+const micBtn       = document.getElementById('micBtn');
+const textInput    = document.getElementById('textInput');
+const sendBtn      = document.getElementById('sendBtn');
+const statusDot    = document.getElementById('statusDot');
+const statusText   = document.getElementById('statusText');
+const interimEl    = document.getElementById('interimText');
+const voiceToggle  = document.getElementById('voiceToggle');
+const browserNote  = document.getElementById('browserNote');
+const whisperPanel = document.getElementById('whisperPanel');
+const downloadBtn  = document.getElementById('downloadBtn');
+const progressBar  = document.getElementById('progressBar');
+const progressWrap = document.getElementById('progressWrap');
+const progressLabel= document.getElementById('progressLabel');
+const modelReady   = document.getElementById('modelReady');
+
+// ── Expose globals for onclick ───────────────────────────────────
+window.setMode = setMode;
+window.loadWhisperModel = loadWhisperModel;
 
 // ── UI helpers ───────────────────────────────────────────────────
 function setStatus(state, label) {
@@ -424,41 +308,65 @@ function setStatus(state, label) {
 function addMessage(text, role) {
   const wrap = document.createElement('div');
   wrap.className = 'message ' + role;
-  wrap.innerHTML = `<span class="message-label">${role === 'user' ? 'you' : 'assistant'}</span>
+  wrap.innerHTML = `<span class="message-label">${role === 'user' ? 'ви' : 'assistant'}</span>
     <div class="message-bubble">${text}</div>`;
   chatWindow.appendChild(wrap);
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
+// ── Mode toggle ──────────────────────────────────────────────────
+function setMode(mode) {
+  sttMode = mode;
+  document.getElementById('btnWebkit').classList.toggle('active', mode === 'webkit');
+  document.getElementById('btnWhisper').classList.toggle('active', mode === 'whisper');
+  whisperPanel.classList.toggle('visible', mode === 'whisper');
+  stopListening();
+
+  if (mode === 'webkit' && !SR) {
+    browserNote.textContent = '⚠ WebKit STT not supported — use Chrome/Edge/Safari on HTTPS';
+    browserNote.style.color = 'var(--danger)';
+  } else if (mode === 'webkit') {
+    browserNote.textContent = isSafari ? 'Safari: HTTPS required for STT' : 'Chrome/Edge: audio sent to Google';
+    browserNote.style.color = '';
+  } else {
+    browserNote.textContent = whisperPipe ? 'Model loaded — fully local' : 'Download model to enable local STT';
+    browserNote.style.color = whisperPipe ? 'var(--success)' : '';
+  }
+  updateMicState();
+}
+
+function updateMicState() {
+  if (sttMode === 'whisper') {
+    micBtn.disabled = !whisperPipe;
+    micBtn.title = whisperPipe ? 'Click to record' : 'Load model first';
+  } else {
+    micBtn.disabled = !SR;
+    micBtn.title = SR ? 'Click to listen' : 'STT not supported';
+  }
+}
+
 // ── TTS ──────────────────────────────────────────────────────────
 function speak(text, onEnd) {
-  if (!ttsEnabled || !window.speechSynthesis) { onEnd && onEnd(); return; }
+  if (!ttsEnabled || !window.speechSynthesis) { onEnd?.(); return; }
   window.speechSynthesis.cancel();
   const utt = new SpeechSynthesisUtterance(text);
-  utt.lang = 'uk-UA';
-  utt.rate = 1.0;
-  utt.pitch = 1.0;
-
-  // Pick a decent voice if available
+  utt.lang = 'uk-UA'; utt.rate = 1.0; utt.pitch = 1.0;
   const voices = speechSynthesis.getVoices();
   const preferred = voices.find(v => v.lang === 'uk-UA' || v.lang === 'uk')
     || voices.find(v => v.name.toLowerCase().includes('ukrain'));
   if (preferred) utt.voice = preferred;
-
   utt.onstart = () => { isSpeaking = true; setStatus('speaking', 'speaking'); };
-  utt.onend = () => { isSpeaking = false; setStatus('idle', 'ready'); onEnd && onEnd(); };
-  utt.onerror = () => { isSpeaking = false; setStatus('idle', 'ready'); onEnd && onEnd(); };
+  utt.onend   = () => { isSpeaking = false; setStatus('idle', 'ready'); onEnd?.(); };
+  utt.onerror = () => { isSpeaking = false; setStatus('idle', 'ready'); onEnd?.(); };
   speechSynthesis.speak(utt);
 }
 
-// ── Bot response handler ─────────────────────────────────────────
+// ── Bot handler ──────────────────────────────────────────────────
 function handleUserMessage(text) {
   if (!text.trim()) return;
   addMessage(text, 'user');
   textInput.value = '';
   interimEl.textContent = '';
-
-  // Simulate slight delay
   setTimeout(() => {
     const reply = getResponse();
     addMessage(reply, 'bot');
@@ -466,29 +374,21 @@ function handleUserMessage(text) {
   }, 300);
 }
 
-// ── Browser detection ────────────────────────────────────────────
-const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-// ── STT setup ───────────────────────────────────────────────────
-// Safari quirks:
-// 1. interimResults often breaks or returns nothing — disable it
-// 2. recognition object must be recreated each session (reuse causes silent failure)
-// 3. .start() must be called synchronously inside a user gesture (no await/setTimeout before it)
-// 4. iOS needs AudioContext unlocked first
-
+// ══════════════════════════════════════════════════════════════════
+// WEBKIT STT
+// ══════════════════════════════════════════════════════════════════
+const PAUSE_RESTARTS = 3;
+let pauseRestartCount = 0;
+let accumulatedTranscript = '';
 let audioCtxUnlocked = false;
 
 function unlockAudioContext() {
   if (audioCtxUnlocked || !isIOS) return;
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const buf = ctx.createBuffer(1, 1, 22050);
+    const buf = ctx.createBuffer(1,1,22050);
     const src = ctx.createBufferSource();
-    src.buffer = buf;
-    src.connect(ctx.destination);
-    src.start(0);
+    src.buffer = buf; src.connect(ctx.destination); src.start(0);
     audioCtxUnlocked = true;
   } catch(e) {}
 }
@@ -496,109 +396,187 @@ function unlockAudioContext() {
 function buildRecognition() {
   if (!SR) return null;
   const r = new SR();
-  r.lang = 'uk-UA'; // change to 'en-US' if preferred
+  r.lang = 'uk-UA';
   r.continuous = false;
-  // Safari: interimResults is unreliable — disable on Safari
   r.interimResults = !isSafari;
   r.maxAlternatives = 1;
   return r;
 }
 
-function initSTT() {
-  if (!SR) {
-    browserNote.textContent = '⚠ STT not supported in this browser';
-    browserNote.style.color = 'var(--danger)';
-    micBtn.disabled = true;
-    micBtn.style.opacity = '0.4';
-    return;
-  }
-  if (isSafari) {
-    browserNote.textContent = 'Safari mode — no interim text, final result only';
-    browserNote.style.color = 'rgba(0,229,255,0.6)';
-  }
-}
-
-function startListening() {
-  // Safari: must recreate recognition object each time
-  recognition = buildRecognition();
-  if (!recognition || isListening || isSpeaking) return;
-
-  // iOS: unlock AudioContext synchronously in gesture
-  unlockAudioContext();
-
+function attachWebkitHandlers() {
   recognition.onstart = () => {
     isListening = true;
     micBtn.classList.add('active');
-    setStatus('listening', 'listening...');
+    setStatus('listening', pauseRestartCount === 0 ? 'listening...' : 'still listening...');
   };
-
   recognition.onresult = (e) => {
-    let interim = '';
-    let final = '';
+    let interim = '', final = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const t = e.results[i][0].transcript;
-      if (e.results[i].isFinal) final += t;
-      else interim += t;
+      if (e.results[i].isFinal) final += t; else interim += t;
     }
-    // On Safari interim is empty — show final as it arrives
-    interimEl.textContent = interim || final;
-    if (final) {
-      textInput.value = final;
-      stopListening();
-      handleUserMessage(final);
-    }
+    interimEl.textContent = interim || (accumulatedTranscript + ' ' + final).trim();
+    if (final) accumulatedTranscript = (accumulatedTranscript + ' ' + final).trim();
   };
-
   recognition.onerror = (e) => {
-    console.warn('STT error:', e.error, e.message);
-    isListening = false;
-    micBtn.classList.remove('active');
+    if (e.error === 'no-speech' && pauseRestartCount < PAUSE_RESTARTS) return;
+    isListening = false; micBtn.classList.remove('active');
     if (e.error === 'not-allowed') {
       setStatus('idle', 'mic blocked');
-      browserNote.textContent = '⚠ Mic access denied — check Safari settings';
+      browserNote.textContent = '⚠ Mic denied — check browser settings';
       browserNote.style.color = 'var(--danger)';
     } else if (e.error === 'no-speech') {
-      setStatus('idle', 'no speech detected');
-    } else {
-      setStatus('idle', 'ready');
-    }
+      if (accumulatedTranscript) { textInput.value = accumulatedTranscript; handleUserMessage(accumulatedTranscript); }
+      else setStatus('idle', 'no speech detected');
+    } else { setStatus('idle', 'ready'); }
   };
-
   recognition.onend = () => {
     isListening = false;
+    if (pauseRestartCount < PAUSE_RESTARTS && micBtn.classList.contains('active')) {
+      pauseRestartCount++;
+      recognition = buildRecognition();
+      attachWebkitHandlers();
+      try { recognition.start(); } catch(e) {}
+      return;
+    }
     micBtn.classList.remove('active');
     interimEl.textContent = '';
-    if (!isSpeaking) setStatus('idle', 'ready');
-    // Safari sometimes fires onend without onresult — check if we got something
-    // via textInput which was set in onresult
+    const final = accumulatedTranscript;
+    accumulatedTranscript = ''; pauseRestartCount = 0;
+    if (final) { textInput.value = final; handleUserMessage(final); }
+    else if (!isSpeaking) setStatus('idle', 'ready');
   };
+}
 
-  // CRITICAL for Safari: .start() must be synchronous here, no async gap
+function startWebkit() {
+  recognition = buildRecognition();
+  if (!recognition || isListening || isSpeaking) return;
+  accumulatedTranscript = ''; pauseRestartCount = 0;
+  unlockAudioContext();
+  attachWebkitHandlers();
+  try { recognition.start(); } catch(e) { console.warn(e); setStatus('idle', 'ready'); }
+}
+
+function stopWebkit() {
+  if (recognition && isListening) try { recognition.stop(); } catch(e) {}
+}
+
+// ══════════════════════════════════════════════════════════════════
+// WHISPER WASM
+// ══════════════════════════════════════════════════════════════════
+async function loadWhisperModel() {
+  if (whisperPipe || whisperLoading) return;
+  whisperLoading = true;
+  downloadBtn.disabled = true;
+  downloadBtn.textContent = 'Loading...';
+  progressWrap.style.display = 'block';
+  progressLabel.textContent = 'Starting download...';
+  setStatus('loading', 'downloading model...');
+
   try {
-    recognition.start();
-  } catch(e) {
-    console.warn('recognition.start() failed:', e);
+    whisperPipe = await pipeline(
+      'automatic-speech-recognition',
+      'onnx-community/whisper-tiny',
+      {
+        dtype: { encoder_model: 'q4', decoder_model_merged: 'q4' },
+        progress_callback: (p) => {
+          if (p.status === 'downloading' || p.status === 'progress') {
+            const pct = p.progress ? Math.round(p.progress) : 0;
+            progressBar.style.width = pct + '%';
+            const mb = p.loaded ? (p.loaded / 1024 / 1024).toFixed(1) : '?';
+            const total = p.total ? (p.total / 1024 / 1024).toFixed(1) : '?';
+            progressLabel.textContent = `${p.file || ''} — ${mb} / ${total} MB (${pct}%)`;
+          } else if (p.status === 'done') {
+            progressLabel.textContent = `✓ ${p.file || 'file'} loaded`;
+          } else if (p.status === 'initiate') {
+            progressLabel.textContent = `Fetching ${p.file || ''}...`;
+          }
+        }
+      }
+    );
+    progressBar.style.width = '100%';
+    progressLabel.textContent = 'Model ready!';
+    modelReady.classList.add('visible');
+    downloadBtn.style.display = 'none';
+    browserNote.textContent = 'Model loaded — fully local, no data sent anywhere';
+    browserNote.style.color = 'var(--success)';
     setStatus('idle', 'ready');
+    updateMicState();
+  } catch(err) {
+    console.error(err);
+    progressLabel.textContent = '⚠ Load failed: ' + err.message;
+    downloadBtn.disabled = false;
+    downloadBtn.textContent = 'Retry';
+    whisperLoading = false;
+    whisperPipe = null;
+    setStatus('idle', 'load failed');
   }
+}
+
+async function startWhisper() {
+  if (!whisperPipe || isListening) return;
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  audioChunks = [];
+  mediaRecorder = new MediaRecorder(stream);
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+  mediaRecorder.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    setStatus('loading', 'transcribing...');
+    micBtn.classList.remove('active');
+    try {
+      const blob = new Blob(audioChunks, { type: 'audio/webm' });
+      const arrayBuffer = await blob.arrayBuffer();
+      // Decode audio to float32 at 16kHz for Whisper
+      const audioCtx = new AudioContext({ sampleRate: 16000 });
+      const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+      const float32 = decoded.getChannelData(0);
+      const result = await whisperPipe(float32, {
+        language: 'uk',
+        task: 'transcribe',
+        chunk_length_s: 30,
+      });
+      const transcript = result.text.trim();
+      interimEl.textContent = '';
+      if (transcript) { textInput.value = transcript; handleUserMessage(transcript); }
+      else setStatus('idle', 'no speech detected');
+    } catch(err) {
+      console.error(err);
+      setStatus('idle', 'transcription failed');
+    }
+  };
+  mediaRecorder.start();
+  isListening = true;
+  micBtn.classList.add('active');
+  setStatus('listening', 'recording...');
+}
+
+function stopWhisper() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+    isListening = false;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Unified mic control
+// ══════════════════════════════════════════════════════════════════
+function startListening() {
+  if (sttMode === 'whisper') startWhisper();
+  else startWebkit();
 }
 
 function stopListening() {
-  if (recognition && isListening) {
-    try { recognition.stop(); } catch(e) {}
-  }
+  if (sttMode === 'whisper') stopWhisper();
+  else stopWebkit();
 }
 
-// ── Events ───────────────────────────────────────────────────────
 micBtn.addEventListener('click', () => {
   if (isListening) stopListening();
   else startListening();
 });
 
 sendBtn.addEventListener('click', () => handleUserMessage(textInput.value));
-
-textInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') handleUserMessage(textInput.value);
-});
+textInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleUserMessage(textInput.value); });
 
 voiceToggle.addEventListener('click', () => {
   ttsEnabled = !ttsEnabled;
@@ -606,11 +584,10 @@ voiceToggle.addEventListener('click', () => {
   if (!ttsEnabled) window.speechSynthesis.cancel();
 });
 
-// Voices load async in some browsers
 speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
 
 // ── Init ─────────────────────────────────────────────────────────
-initSTT();
+setMode('webkit');
 setStatus('idle', 'ready');
 </script>
 </body>
