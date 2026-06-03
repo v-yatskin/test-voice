@@ -95,6 +95,30 @@
   .backend-btn:disabled { opacity:0.35; cursor:not-allowed; }
   .backend-btn .badge { font-size:0.55rem; opacity:0.7; margin-left:4px; letter-spacing:0.04em; }
 
+  /* Vosk model URL input */
+  .vosk-url-input {
+    width:100%; margin-bottom:12px; padding:8px 10px;
+    background:var(--bg); border:1px solid var(--border); border-radius:4px;
+    color:var(--text); font-family:'JetBrains Mono',monospace; font-size:0.7rem;
+    outline:none; transition:border-color 0.2s;
+  }
+  .vosk-url-input:focus { border-color:rgba(0,229,255,0.3); }
+  .vosk-url-input::placeholder { color:var(--muted); }
+  .vosk-presets { display:flex; gap:6px; margin-bottom:10px; }
+  .vosk-preset {
+    flex:1; padding:8px 4px; background:rgba(0,229,255,0.08);
+    border:1px solid rgba(0,229,255,0.3); border-radius:4px;
+    color:var(--accent); font-family:'JetBrains Mono',monospace;
+    font-size:0.66rem; text-transform:uppercase; letter-spacing:0.08em;
+    cursor:pointer; transition:all 0.2s;
+  }
+  .vosk-preset:hover { background:rgba(0,229,255,0.18); }
+  .vosk-preset:disabled { opacity:0.4; cursor:not-allowed; }
+  .vosk-or {
+    text-align:center; font-size:0.6rem; color:var(--muted);
+    margin:6px 0 10px; letter-spacing:0.1em; text-transform:uppercase;
+  }
+
   /* Status bar */
   .status-bar {
     width:100%; max-width:680px; display:flex; align-items:center;
@@ -130,6 +154,10 @@
   }
   .message.user .message-bubble { background:var(--user-bg); border:1px solid rgba(0,229,255,0.15); border-bottom-right-radius:2px; }
   .message.bot  .message-bubble { background:var(--bot-bg);  border:1px solid rgba(124,77,255,0.2); border-bottom-left-radius:2px; }
+  .message-meta { font-size:0.58rem; color:var(--muted); letter-spacing:0.04em;
+    font-family:'JetBrains Mono',monospace; opacity:0.7; }
+  .message.user .message-meta { text-align:right; }
+  .message.bot  .message-meta { text-align:left; }
 
   /* Controls */
   .controls { width:100%; max-width:680px; margin-top:14px; display:flex; align-items:center; gap:12px; }
@@ -196,12 +224,17 @@
 <div class="mode-bar">
   <button class="mode-btn active" id="btnWebkit" onclick="setMode('webkit')">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>
-    WebKit STT
+    WebKit
   </button>
   <div class="mode-divider"></div>
   <button class="mode-btn" id="btnWhisper" onclick="setMode('whisper')">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-    Whisper WASM
+    Whisper
+  </button>
+  <div class="mode-divider"></div>
+  <button class="mode-btn" id="btnVosk" onclick="setMode('vosk')">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h3l3-9 6 18 3-9h3"/></svg>
+    Vosk
   </button>
 </div>
 
@@ -214,15 +247,15 @@
       <button class="backend-btn"        id="btnWebgpu" onclick="setDevice('webgpu')">WebGPU <span class="badge">GPU</span></button>
     </div>
     <div class="model-selector">
-      <button class="model-choice active" data-model="onnx-community/whisper-tiny"            data-size="~40 MB"  onclick="selectModel(this)">tiny</button>
-      <button class="model-choice"        data-model="onnx-community/whisper-base"            data-size="~80 MB"  onclick="selectModel(this)">base</button>
-      <button class="model-choice"        data-model="onnx-community/whisper-small"           data-size="~180 MB" onclick="selectModel(this)">small</button>
+      <button class="model-choice active" data-model="onnx-community/whisper-small"           data-size="~180 MB" onclick="selectModel(this)">small</button>
+      <button class="model-choice"        data-model="onnx-community/whisper-medium-ONNX"     data-size="~450 MB" onclick="selectModel(this)">medium</button>
       <button class="model-choice"        data-model="onnx-community/whisper-large-v3-turbo"  data-size="~600 MB" data-webgpu-only="1" onclick="selectModel(this)">turbo</button>
+      <button class="model-choice"        data-model="onnx-community/mms-1b-all-ONNX"         data-size="~545 MB" data-suffix="q4f16/q4 · Wav2Vec2-CTC · 1000+ langs" onclick="selectModel(this)">mms-1b</button>
     </div>
     <div class="model-info">
       <div>
-        <div class="model-name" id="modelName">onnx-community/whisper-tiny</div>
-        <div class="model-size" id="modelSizeLabel">~40 MB · q4 quantized · multilingual</div>
+        <div class="model-name" id="modelName">onnx-community/whisper-small</div>
+        <div class="model-size" id="modelSizeLabel">~180 MB · q4 quantized · multilingual</div>
       </div>
       <button class="download-btn" id="downloadBtn" onclick="loadWhisperModel()">Download & load</button>
     </div>
@@ -237,6 +270,32 @@
   </div>
 </div>
 
+<!-- Vosk panel -->
+<div class="whisper-panel" id="voskPanel">
+  <div class="whisper-inner">
+    <div class="whisper-title">Vosk · streaming partials</div>
+    <div class="vosk-presets">
+      <button class="vosk-preset" onclick="installVoskPreset('nano')">UK · Nano (73 MB)</button>
+      <button class="vosk-preset" onclick="installVoskPreset('small')">UK · Small (133 MB)</button>
+    </div>
+    <div class="vosk-or">or paste a tar.gz / zip URL</div>
+    <input class="vosk-url-input" id="voskUrlInput" type="text"
+           placeholder="https://your-host.example/vosk-model.tar.gz">
+    <div class="model-info">
+      <div>
+        <div class="model-name">Self-hosted Kaldi · tar.gz</div>
+        <div class="model-size">Continuous · per-phrase finals · ~50–325 MB</div>
+      </div>
+      <button class="download-btn" id="voskLoadBtn" onclick="loadVoskModel()">Download & load</button>
+    </div>
+    <div class="model-ready" id="voskReady">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+      <span id="voskReadyLabel">Vosk model loaded — ready</span>
+    </div>
+    <div class="progress-label" id="voskProgressLabel"></div>
+  </div>
+</div>
+
 <!-- Status bar -->
 <div class="status-bar">
   <div class="status-dot idle" id="statusDot"></div>
@@ -245,12 +304,7 @@
 </div>
 
 <!-- Chat -->
-<div class="chat-window" id="chatWindow">
-  <div class="message bot">
-    <span class="message-label">assistant</span>
-    <div class="message-bubble">Привіт! Я ваш голосовий асистент. Оберіть режим STT вгорі, натисніть мікрофон або введіть повідомлення.</div>
-  </div>
-</div>
+<div class="chat-window" id="chatWindow"></div>
 
 <!-- Controls -->
 <div class="controls">
@@ -273,10 +327,6 @@
 
 <div class="footer-row">
   <span class="browser-note" id="browserNote"></span>
-  <label class="voice-toggle">
-    <div class="toggle-switch on" id="voiceToggle"></div>
-    TTS
-  </label>
 </div>
 
 <script type="module">
@@ -285,32 +335,31 @@ import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transfo
 // Cache models in browser IndexedDB
 env.allowLocalModels = false;
 
-// ── Hardcoded Ukrainian responses ────────────────────────────────
-const RESPONSES = [
-  "Вітаю! Я отримав ваше повідомлення. У реальному сценарії це пішло б до вашого LLM API.",
-  "Цікаво! Цей демо використовує Web Speech API як для розпізнавання мови, так і для відтворення.",
-  "Гарне питання. Розпізнавання обробляється браузером — Safari використовує сервери Apple.",
-  "Ви можете замінити цю відповідь будь-яким fetch() запитом до вашого бекенду чатботу.",
-  "Озвучення повністю локальне — голоси встановлені на вашій ОС, мережевих запитів немає.",
-  "Хочете режим вільних рук? Можна налаштувати автоматичний перезапуск мікрофона після відповіді.",
-  "Цей підхід добре підходить для ботів підтримки клієнтів — голосовий шар це тонка обгортка над API.",
-];
-let responseIndex = 0;
-const getResponse = () => RESPONSES[responseIndex++ % RESPONSES.length];
-
 // ── State ────────────────────────────────────────────────────────
-let sttMode        = 'webkit';   // 'webkit' | 'whisper'
+let sttMode        = 'webkit';   // 'webkit' | 'whisper' | 'vosk'
 let isListening    = false;
-let isSpeaking     = false;
-let ttsEnabled     = true;
 let recognition    = null;
 let whisperPipe    = null;
 let whisperLoading = false;
-let selectedModel  = 'onnx-community/whisper-tiny';
+let selectedModel  = 'onnx-community/whisper-small';
 let selectedDevice = 'wasm';     // 'wasm' | 'webgpu'
 let loadedModels   = {}; // cache: `${modelId}::${device}` -> pipeline
 let mediaRecorder  = null;
 let audioChunks    = [];
+
+// Vosk state
+const VOSK_SDK_URL = 'https://cdn.jsdelivr.net/npm/vosk-browser@0.0.8/dist/vosk.js';
+const VOSK_PRESETS = {
+  nano:  { url: 'https://huggingface.co/Yehor/vosk-uk/resolve/main/uk_v3_dynamic_nano.zip',  label: 'UK Nano',  size: 73  },
+  small: { url: 'https://huggingface.co/Yehor/vosk-uk/resolve/main/uk_v3_dynamic_small.zip', label: 'UK Small', size: 133 },
+};
+let voskModel      = null;
+let voskRecognizer = null;
+let voskAudioCtx   = null;
+let voskSource     = null;
+let voskProcessor  = null;
+let voskLoading    = false;
+let voskPhraseStart = 0;
 
 const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 const isIOS    = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
@@ -326,7 +375,6 @@ const sendBtn      = document.getElementById('sendBtn');
 const statusDot    = document.getElementById('statusDot');
 const statusText   = document.getElementById('statusText');
 const interimEl    = document.getElementById('interimText');
-const voiceToggle  = document.getElementById('voiceToggle');
 const browserNote  = document.getElementById('browserNote');
 const whisperPanel = document.getElementById('whisperPanel');
 const downloadBtn  = document.getElementById('downloadBtn');
@@ -334,12 +382,19 @@ const progressBar  = document.getElementById('progressBar');
 const progressWrap = document.getElementById('progressWrap');
 const progressLabel= document.getElementById('progressLabel');
 const modelReady   = document.getElementById('modelReady');
+const voskPanel    = document.getElementById('voskPanel');
+const voskUrlInput = document.getElementById('voskUrlInput');
+const voskLoadBtn  = document.getElementById('voskLoadBtn');
+const voskReady    = document.getElementById('voskReady');
+const voskProgressLabel = document.getElementById('voskProgressLabel');
 
 // ── Expose globals for onclick ───────────────────────────────────
 window.setMode = setMode;
 window.loadWhisperModel = loadWhisperModel;
 window.selectModel = selectModel;
 window.setDevice = setDevice;
+window.loadVoskModel = loadVoskModel;
+window.installVoskPreset = installVoskPreset;
 
 // ── UI helpers ───────────────────────────────────────────────────
 function setStatus(state, label) {
@@ -347,13 +402,50 @@ function setStatus(state, label) {
   statusText.textContent = label;
 }
 
-function addMessage(text, role) {
+function formatMeta(meta) {
+  const parts = [];
+  if (meta.engine) parts.push(meta.engine);
+  if (meta.device) parts.push(meta.device);
+  if (meta.audioSec != null) parts.push(meta.audioSec.toFixed(1) + 's audio');
+  if (meta.sttMs != null) {
+    parts.push(meta.sttMs < 1000 ? Math.round(meta.sttMs) + 'ms'
+                                 : (meta.sttMs / 1000).toFixed(2) + 's');
+  }
+  return parts.join(' · ');
+}
+
+function addMessage(text, role, meta) {
   const wrap = document.createElement('div');
   wrap.className = 'message ' + role;
+  const metaHtml = meta ? `<div class="message-meta">${formatMeta(meta)}</div>` : '';
   wrap.innerHTML = `<span class="message-label">${role === 'user' ? 'ви' : 'assistant'}</span>
-    <div class="message-bubble">${text}</div>`;
+    <div class="message-bubble">${text}</div>${metaHtml}`;
   chatWindow.appendChild(wrap);
   chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+// Short, human-readable model label e.g. "whisper-small" → "small"
+function modelLabel(id) {
+  return id.split('/').pop().replace(/^whisper-/, '').replace(/-ONNX$/, '');
+}
+
+// Architecture family — controls dtype layout and inference options.
+function modelArch(id) {
+  return id.toLowerCase().includes('mms') ? 'mms' : 'whisper';
+}
+
+// Per-model dtype config: Whisper has a split encoder/decoder, MMS is one block.
+function dtypeFor(model, device) {
+  if (modelArch(model) === 'mms') {
+    return device === 'webgpu' ? 'q4f16' : 'q4';
+  }
+  return { encoder_model: 'q4', decoder_model_merged: 'q4' };
+}
+
+// Per-model call options. MMS's tokenizer is set up at load time, not per call.
+function asrCallOptions(model) {
+  if (modelArch(model) === 'mms') return {};
+  return { language: 'uk', task: 'transcribe', chunk_length_s: 30 };
 }
 
 // ── Mode toggle ──────────────────────────────────────────────────
@@ -361,7 +453,9 @@ function setMode(mode) {
   sttMode = mode;
   document.getElementById('btnWebkit').classList.toggle('active', mode === 'webkit');
   document.getElementById('btnWhisper').classList.toggle('active', mode === 'whisper');
+  document.getElementById('btnVosk').classList.toggle('active', mode === 'vosk');
   whisperPanel.classList.toggle('visible', mode === 'whisper');
+  voskPanel.classList.toggle('visible', mode === 'vosk');
   stopListening();
 
   if (mode === 'webkit' && !SR) {
@@ -372,9 +466,19 @@ function setMode(mode) {
     browserNote.textContent = isSafari ? 'Safari: HTTPS required for STT' : 'Chrome/Edge: audio sent to Google';
     browserNote.style.color = '';
     updateMicState();
-  } else {
+  } else if (mode === 'whisper') {
     // Whisper mode — defer to refreshModelUI so the note reflects device + load state
     refreshModelUI();
+  } else {
+    // Vosk mode
+    if (voskModel) {
+      browserNote.textContent = 'Vosk loaded — fully local, streaming partials';
+      browserNote.style.color = 'var(--success)';
+    } else {
+      browserNote.textContent = 'Paste a Vosk tar.gz URL to load streaming model';
+      browserNote.style.color = '';
+    }
+    updateMicState();
   }
 }
 
@@ -382,39 +486,21 @@ function updateMicState() {
   if (sttMode === 'whisper') {
     micBtn.disabled = !whisperPipe;
     micBtn.title = whisperPipe ? 'Click to record' : 'Load model first';
+  } else if (sttMode === 'vosk') {
+    micBtn.disabled = !voskModel;
+    micBtn.title = voskModel ? 'Click to start streaming · click again to stop' : 'Load model first';
   } else {
     micBtn.disabled = !SR;
     micBtn.title = SR ? 'Click to listen' : 'STT not supported';
   }
 }
 
-// ── TTS ──────────────────────────────────────────────────────────
-function speak(text, onEnd) {
-  if (!ttsEnabled || !window.speechSynthesis) { onEnd?.(); return; }
-  window.speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(text);
-  utt.lang = 'uk-UA'; utt.rate = 1.0; utt.pitch = 1.0;
-  const voices = speechSynthesis.getVoices();
-  const preferred = voices.find(v => v.lang === 'uk-UA' || v.lang === 'uk')
-    || voices.find(v => v.name.toLowerCase().includes('ukrain'));
-  if (preferred) utt.voice = preferred;
-  utt.onstart = () => { isSpeaking = true; setStatus('speaking', 'speaking'); };
-  utt.onend   = () => { isSpeaking = false; setStatus('idle', 'ready'); onEnd?.(); };
-  utt.onerror = () => { isSpeaking = false; setStatus('idle', 'ready'); onEnd?.(); };
-  speechSynthesis.speak(utt);
-}
-
-// ── Bot handler ──────────────────────────────────────────────────
-function handleUserMessage(text) {
+// ── Transcript handler ───────────────────────────────────────────
+function handleUserMessage(text, meta) {
   if (!text.trim()) return;
-  addMessage(text, 'user');
+  addMessage(text, 'user', meta);
   textInput.value = '';
   interimEl.textContent = '';
-  setTimeout(() => {
-    const reply = getResponse();
-    addMessage(reply, 'bot');
-    speak(reply);
-  }, 300);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -424,6 +510,14 @@ const PAUSE_RESTARTS = 3;
 let pauseRestartCount = 0;
 let accumulatedTranscript = '';
 let audioCtxUnlocked = false;
+let webkitRecordStart = 0;
+
+function webkitMeta() {
+  return {
+    engine: 'WebKit',
+    audioSec: webkitRecordStart ? (performance.now() - webkitRecordStart) / 1000 : null,
+  };
+}
 
 function unlockAudioContext() {
   if (audioCtxUnlocked || !isIOS) return;
@@ -469,8 +563,11 @@ function attachWebkitHandlers() {
       browserNote.textContent = '⚠ Mic denied — check browser settings';
       browserNote.style.color = 'var(--danger)';
     } else if (e.error === 'no-speech') {
-      if (accumulatedTranscript) { textInput.value = accumulatedTranscript; handleUserMessage(accumulatedTranscript); }
-      else setStatus('idle', 'no speech detected');
+      if (accumulatedTranscript) {
+        const meta = webkitMeta();
+        textInput.value = accumulatedTranscript;
+        handleUserMessage(accumulatedTranscript, meta);
+      } else setStatus('idle', 'no speech detected');
     } else { setStatus('idle', 'ready'); }
   };
   recognition.onend = () => {
@@ -485,16 +582,18 @@ function attachWebkitHandlers() {
     micBtn.classList.remove('active');
     interimEl.textContent = '';
     const final = accumulatedTranscript;
-    accumulatedTranscript = ''; pauseRestartCount = 0;
-    if (final) { textInput.value = final; handleUserMessage(final); }
-    else if (!isSpeaking) setStatus('idle', 'ready');
+    const meta = final ? webkitMeta() : null;
+    accumulatedTranscript = ''; pauseRestartCount = 0; webkitRecordStart = 0;
+    if (final) { textInput.value = final; handleUserMessage(final, meta); }
+    setStatus('idle', final ? 'ready' : 'no speech detected');
   };
 }
 
 function startWebkit() {
   recognition = buildRecognition();
-  if (!recognition || isListening || isSpeaking) return;
+  if (!recognition || isListening) return;
   accumulatedTranscript = ''; pauseRestartCount = 0;
+  webkitRecordStart = performance.now();
   unlockAudioContext();
   attachWebkitHandlers();
   try { recognition.start(); } catch(e) { console.warn(e); setStatus('idle', 'ready'); }
@@ -514,8 +613,9 @@ function selectModel(btn) {
   btn.classList.add('active');
   selectedModel = btn.dataset.model;
   const size = btn.dataset.size;
+  const suffix = btn.dataset.suffix || 'q4 quantized · multilingual';
   document.getElementById('modelName').textContent = selectedModel;
-  document.getElementById('modelSizeLabel').textContent = size + ' · q4 quantized · multilingual';
+  document.getElementById('modelSizeLabel').textContent = size + ' · ' + suffix;
   refreshModelUI();
 }
 
@@ -526,15 +626,16 @@ function setDevice(device) {
   document.getElementById('btnWasm').classList.toggle('active', device === 'wasm');
   document.getElementById('btnWebgpu').classList.toggle('active', device === 'webgpu');
 
-  // If the currently selected model is WebGPU-only and we're switching to WASM, fall back to tiny
+  // If the currently selected model is WebGPU-only and we're switching to WASM, fall back to small
   const activeBtn = document.querySelector('.model-choice.active');
   if (activeBtn && activeBtn.dataset.webgpuOnly === '1' && device !== 'webgpu') {
     document.querySelectorAll('.model-choice').forEach(b => b.classList.remove('active'));
-    const tinyBtn = document.querySelector('.model-choice[data-model="onnx-community/whisper-tiny"]');
-    tinyBtn.classList.add('active');
-    selectedModel = tinyBtn.dataset.model;
+    const fallbackBtn = document.querySelector('.model-choice[data-model="onnx-community/whisper-small"]');
+    fallbackBtn.classList.add('active');
+    selectedModel = fallbackBtn.dataset.model;
+    const fbSuffix = fallbackBtn.dataset.suffix || 'q4 quantized · multilingual';
     document.getElementById('modelName').textContent = selectedModel;
-    document.getElementById('modelSizeLabel').textContent = tinyBtn.dataset.size + ' · q4 quantized · multilingual';
+    document.getElementById('modelSizeLabel').textContent = fallbackBtn.dataset.size + ' · ' + fbSuffix;
   }
   refreshModelUI();
 }
@@ -593,7 +694,7 @@ async function loadWhisperModel() {
       selectedModel,
       {
         device: selectedDevice,
-        dtype: { encoder_model: 'q4', decoder_model_merged: 'q4' },
+        dtype: dtypeFor(selectedModel, selectedDevice),
         progress_callback: (p) => {
           if (p.status === 'downloading' || p.status === 'progress') {
             const pct = p.progress ? Math.round(p.progress) : 0;
@@ -609,6 +710,11 @@ async function loadWhisperModel() {
         }
       }
     );
+    // MMS uses language-specific tokenizer adapters — wire Ukrainian on load.
+    if (modelArch(selectedModel) === 'mms') {
+      try { pipe.tokenizer.target_lang = 'ukr'; }
+      catch (e) { console.warn('Could not set MMS target_lang:', e); }
+    }
     loadedModels[key] = pipe;
     whisperPipe = pipe;
     whisperLoading = false;
@@ -636,17 +742,25 @@ async function loadWhisperModel() {
   }
 }
 
-// VAD config
-const VAD_SILENCE_MS   = 1500;  // stop after 1.5s of silence
-const VAD_SPEECH_DB    = -45;   // dB threshold to detect speech start
-const VAD_SILENCE_DB   = -55;   // dB threshold for silence
-const VAD_MIN_SPEECH_MS = 300;  // ignore clips shorter than this
+// VAD config — adaptive (calibrated to ambient noise floor each session)
+const VAD_CALIBRATE_MS    = 400;   // measure ambient noise for this long after start
+const VAD_SPEECH_MARGIN   = 10;    // dB above noise floor → speech onset
+const VAD_SILENCE_MARGIN  = 4;     // dB above noise floor → back to silence
+const VAD_SILENCE_MS      = 1200;  // sustained silence before stopping
+const VAD_MIN_SPEECH_MS   = 250;   // ignore utterances shorter than this
+const VAD_SMOOTH          = 0.3;   // EMA factor for dB smoothing
 
 let silenceTimer  = null;
 let analyser      = null;
 let vadFrame      = null;
 let speechStarted = false;
+let speechStartTs = 0;
 let activeStream  = null;
+let calibrating   = false;
+let calibStart    = 0;
+let noiseSamples  = [];
+let noiseFloor    = -55;          // sensible default before calibration
+let smoothedDb    = null;
 
 function dbFromAnalyser() {
   const buf = new Uint8Array(analyser.fftSize);
@@ -697,14 +811,23 @@ async function startWhisper() {
       const audioCtx = new AudioContext({ sampleRate: 16000 });
       const decoded = await audioCtx.decodeAudioData(arrayBuffer);
       const float32 = decoded.getChannelData(0);
-      const result = await whisperPipe(float32, {
-        language: 'uk',
-        task: 'transcribe',
-        chunk_length_s: 30,
-      });
+      const audioSec = decoded.duration;
+      const sttStart = performance.now();
+      const result = await whisperPipe(float32, asrCallOptions(selectedModel));
+      const sttMs = performance.now() - sttStart;
       const transcript = result.text.trim();
       interimEl.textContent = '';
-      if (transcript) { textInput.value = transcript; handleUserMessage(transcript); }
+      if (transcript) {
+        const meta = {
+          engine: modelLabel(selectedModel),
+          device: selectedDevice === 'webgpu' ? 'WebGPU' : 'WASM',
+          audioSec,
+          sttMs,
+        };
+        textInput.value = transcript;
+        handleUserMessage(transcript, meta);
+        setStatus('idle', 'ready');
+      }
       else setStatus('idle', 'no speech detected');
     } catch(err) {
       console.error(err);
@@ -712,42 +835,71 @@ async function startWhisper() {
     }
   };
 
+  // Reset VAD state for this session
+  speechStarted = false;
+  speechStartTs = 0;
+  silenceTimer  = null;
+  calibrating   = true;
+  calibStart    = performance.now();
+  noiseSamples  = [];
+  smoothedDb    = null;
+  noiseFloor    = -55;
+
   mediaRecorder.start();
   isListening = true;
-  speechStarted = false;
   micBtn.classList.add('active');
-  setStatus('listening', 'waiting for speech...');
+  setStatus('listening', 'calibrating mic...');
 
-  // VAD loop
-  const recordStart = Date.now();
   function vadTick() {
     if (!isListening) return;
-    const db = dbFromAnalyser();
+    const raw = dbFromAnalyser();
+    // EMA smoothing — kills single-frame spikes/dips
+    smoothedDb = (smoothedDb == null) ? raw : (smoothedDb * (1 - VAD_SMOOTH) + raw * VAD_SMOOTH);
+
+    // ── Phase 1: calibrate noise floor ──
+    if (calibrating) {
+      noiseSamples.push(smoothedDb);
+      if (performance.now() - calibStart >= VAD_CALIBRATE_MS) {
+        calibrating = false;
+        const sorted = [...noiseSamples].sort((a, b) => a - b);
+        const median = sorted[Math.floor(sorted.length / 2)];
+        // Clamp to a sane range so a weird outlier can't break detection
+        noiseFloor = Math.max(-70, Math.min(-25, median ?? -55));
+        setStatus('listening', 'waiting for speech...');
+      }
+      vadFrame = requestAnimationFrame(vadTick);
+      return;
+    }
+
+    // ── Phase 2: detect speech against the measured floor ──
+    const speechThreshold  = noiseFloor + VAD_SPEECH_MARGIN;
+    const silenceThreshold = noiseFloor + VAD_SILENCE_MARGIN;
 
     if (!speechStarted) {
-      if (db > VAD_SPEECH_DB) {
+      if (smoothedDb > speechThreshold) {
         speechStarted = true;
+        speechStartTs = performance.now();
         setStatus('listening', 'recording...');
         interimEl.textContent = '🎙';
       }
     } else {
-      if (db < VAD_SILENCE_DB) {
-        // Silence detected — start/reset countdown
+      if (smoothedDb < silenceThreshold) {
+        // Silence — arm the stop timer (cancelled if sound returns before it fires)
         if (!silenceTimer) {
           silenceTimer = setTimeout(() => {
-            const elapsed = Date.now() - recordStart;
-            if (elapsed > VAD_MIN_SPEECH_MS) stopWhisper();
+            const speechMs = performance.now() - speechStartTs;
+            if (speechMs > VAD_MIN_SPEECH_MS) stopWhisper();
             else {
-              // Too short, keep going
+              // Too short to be real speech — reset and keep listening
               silenceTimer = null;
               speechStarted = false;
+              speechStartTs = 0;
               setStatus('listening', 'waiting for speech...');
               interimEl.textContent = '';
             }
           }, VAD_SILENCE_MS);
         }
       } else {
-        // Sound again — cancel silence countdown
         if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
         interimEl.textContent = '🎙';
       }
@@ -772,15 +924,237 @@ function stopWhisper() {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// VOSK (streaming)
+// ══════════════════════════════════════════════════════════════════
+
+// Minimal USTAR tar packer — regular files only, filenames ≤ 99 chars.
+// Vosk model paths comfortably fit; throws if a longer name appears.
+function packTar(entries) {
+  const enc = new TextEncoder();
+  const names = Object.keys(entries);
+  let total = 0;
+  for (const n of names) total += 512 + Math.ceil(entries[n].length / 512) * 512;
+  total += 1024; // two trailing zero blocks
+  const out = new Uint8Array(total);
+  let pos = 0;
+  for (const n of names) {
+    const data = entries[n];
+    if (n.length > 99) throw new Error('tar: filename too long: ' + n);
+    const h = new Uint8Array(512);
+    h.set(enc.encode(n), 0);
+    h.set(enc.encode('000644 \0'), 100);
+    h.set(enc.encode('000000 \0'), 108);
+    h.set(enc.encode('000000 \0'), 116);
+    h.set(enc.encode(data.length.toString(8).padStart(11, '0') + '\0'), 124);
+    h.set(enc.encode('00000000000\0'), 136);
+    h.set(enc.encode('        '), 148);          // checksum placeholder
+    h[156] = 0x30;                                // typeflag '0' (regular)
+    h.set(enc.encode('ustar\0'), 257);
+    h.set(enc.encode('00'), 263);
+    let cks = 0;
+    for (let i = 0; i < 512; i++) cks += h[i];
+    h.set(enc.encode(cks.toString(8).padStart(6, '0') + '\0 '), 148);
+    out.set(h, pos); pos += 512;
+    out.set(data, pos); pos += data.length;
+    pos = Math.ceil(pos / 512) * 512;
+  }
+  return out;
+}
+
+// Repack a Vosk model zip as tar.gz in memory; vosk-browser only accepts tar.gz.
+async function zipToTarGzBlobUrl(zipBytes, onProgress) {
+  const fflate = await import('https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm');
+  onProgress?.('Extracting zip...');
+  const entries = await new Promise((res, rej) =>
+    fflate.unzip(zipBytes, (err, data) => err ? rej(err) : res(data)));
+  // Drop directory placeholders; keep only file entries with content
+  const files = {};
+  for (const [name, data] of Object.entries(entries)) {
+    if (!name.endsWith('/') && data.length >= 0) files[name] = data;
+  }
+  onProgress?.('Repacking as tar...');
+  const tar = packTar(files);
+  onProgress?.('Compressing tar.gz...');
+  const targz = await new Promise((res, rej) =>
+    fflate.gzip(tar, { level: 1 }, (err, data) => err ? rej(err) : res(data)));
+  return URL.createObjectURL(new Blob([targz], { type: 'application/gzip' }));
+}
+
+// Stream a URL with a fetch + reader so we can show download progress.
+async function fetchWithProgress(url, onProgress) {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  const total = Number(resp.headers.get('content-length')) || 0;
+  const reader = resp.body.getReader();
+  const chunks = [];
+  let received = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    onProgress?.(received, total);
+  }
+  const out = new Uint8Array(received);
+  let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  return out;
+}
+
+async function installVoskPreset(key) {
+  const preset = VOSK_PRESETS[key];
+  if (!preset || voskLoading || voskModel) return;
+  await runVoskInstall(preset.url, preset.label, preset.size);
+}
+
+// Shared install pipeline for both presets and the manual URL field
+async function runVoskInstall(url, label, sizeHintMb) {
+  voskLoading = true;
+  document.querySelectorAll('.vosk-preset').forEach(b => b.disabled = true);
+  voskLoadBtn.disabled = true;
+  voskLoadBtn.textContent = 'Installing...';
+  setStatus('loading', `installing ${label}...`);
+  voskProgressLabel.textContent = `Downloading ${label}${sizeHintMb ? ` (~${sizeHintMb} MB)` : ''}...`;
+
+  try {
+    const isZip = /\.zip(?:$|\?)/i.test(url);
+    const bytes = await fetchWithProgress(url, (received, total) => {
+      const mb = (received / 1024 / 1024).toFixed(1);
+      if (total) {
+        const totalMb = (total / 1024 / 1024).toFixed(1);
+        const pct = Math.round(received / total * 100);
+        voskProgressLabel.textContent = `Downloading — ${mb} / ${totalMb} MB (${pct}%)`;
+      } else {
+        voskProgressLabel.textContent = `Downloading — ${mb} MB`;
+      }
+    });
+
+    let modelUrl;
+    if (isZip) {
+      modelUrl = await zipToTarGzBlobUrl(bytes, (msg) => { voskProgressLabel.textContent = msg; });
+    } else {
+      // Already tar.gz — wrap in blob URL so vosk-browser fetches from memory
+      modelUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/gzip' }));
+    }
+
+    voskProgressLabel.textContent = 'Loading model into Vosk...';
+    await loadVoskScript();
+    voskModel = await window.Vosk.createModel(modelUrl);
+
+    voskProgressLabel.textContent = `✓ ${label} ready — streaming enabled`;
+    voskReady.classList.add('visible');
+    voskLoadBtn.style.display = 'none';
+    document.querySelectorAll('.vosk-preset').forEach(b => b.style.display = 'none');
+    voskLoading = false;
+    browserNote.textContent = 'Vosk loaded — fully local, streaming partials';
+    browserNote.style.color = 'var(--success)';
+    setStatus('idle', 'ready');
+    updateMicState();
+  } catch (err) {
+    console.error(err);
+    voskProgressLabel.textContent = '⚠ Install failed: ' + (err.message || err);
+    document.querySelectorAll('.vosk-preset').forEach(b => b.disabled = false);
+    voskLoadBtn.disabled = false;
+    voskLoadBtn.textContent = 'Retry';
+    voskLoading = false;
+    voskModel = null;
+    setStatus('idle', 'install failed');
+  }
+}
+
+function loadVoskScript() {
+  if (window.Vosk) return Promise.resolve();
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = VOSK_SDK_URL;
+    s.onload = () => res();
+    s.onerror = () => rej(new Error('Failed to load vosk-browser SDK from CDN'));
+    document.head.appendChild(s);
+  });
+}
+
+async function loadVoskModel() {
+  const url = voskUrlInput.value.trim();
+  if (!url) { voskProgressLabel.textContent = '⚠ Paste a model URL first'; return; }
+  if (voskLoading || voskModel) return;
+  localStorage.setItem('voskModelUrl', url);
+  await runVoskInstall(url, 'custom model');
+}
+
+async function startVosk() {
+  if (!voskModel || isListening) return;
+  try {
+    activeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    voskAudioCtx = new AudioContext();
+    voskSource = voskAudioCtx.createMediaStreamSource(activeStream);
+
+    voskRecognizer = new voskModel.KaldiRecognizer(voskAudioCtx.sampleRate);
+    voskRecognizer.setWords(false);
+    voskPhraseStart = 0;
+
+    voskRecognizer.on('result', (msg) => {
+      const text = (msg && msg.result && msg.result.text || '').trim();
+      if (text) {
+        const audioSec = voskPhraseStart ? (performance.now() - voskPhraseStart) / 1000 : null;
+        handleUserMessage(text, { engine: 'Vosk', audioSec });
+      }
+      voskPhraseStart = 0;
+      interimEl.textContent = '';
+    });
+    voskRecognizer.on('partialresult', (msg) => {
+      const partial = (msg && msg.result && msg.result.partial || '').trim();
+      if (partial && !voskPhraseStart) voskPhraseStart = performance.now();
+      interimEl.textContent = partial;
+    });
+
+    voskProcessor = voskAudioCtx.createScriptProcessor(4096, 1, 1);
+    voskProcessor.onaudioprocess = (e) => {
+      try { voskRecognizer.acceptWaveform(e.inputBuffer); } catch (err) { /* swallow */ }
+    };
+    voskSource.connect(voskProcessor);
+    voskProcessor.connect(voskAudioCtx.destination);
+
+    isListening = true;
+    micBtn.classList.add('active');
+    setStatus('listening', 'streaming (click mic to stop)');
+  } catch (err) {
+    console.error(err);
+    setStatus('idle', 'mic failed');
+    isListening = false;
+    micBtn.classList.remove('active');
+  }
+}
+
+function stopVosk() {
+  if (voskProcessor) { try { voskProcessor.disconnect(); } catch (e) {} voskProcessor = null; }
+  if (voskSource)    { try { voskSource.disconnect();    } catch (e) {} voskSource = null; }
+  if (voskAudioCtx && voskAudioCtx.state !== 'closed') {
+    try { voskAudioCtx.close(); } catch (e) {}
+    voskAudioCtx = null;
+  }
+  if (activeStream)  { activeStream.getTracks().forEach(t => t.stop()); activeStream = null; }
+  if (voskRecognizer) { try { voskRecognizer.remove(); } catch (e) {} voskRecognizer = null; }
+  voskPhraseStart = 0;
+  interimEl.textContent = '';
+  if (isListening) {
+    isListening = false;
+    micBtn.classList.remove('active');
+    setStatus('idle', 'ready');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
 // Unified mic control
 // ══════════════════════════════════════════════════════════════════
 function startListening() {
   if (sttMode === 'whisper') startWhisper();
+  else if (sttMode === 'vosk') startVosk();
   else startWebkit();
 }
 
 function stopListening() {
   if (sttMode === 'whisper') stopWhisper();
+  else if (sttMode === 'vosk') stopVosk();
   else stopWebkit();
 }
 
@@ -792,14 +1166,6 @@ micBtn.addEventListener('click', () => {
 sendBtn.addEventListener('click', () => handleUserMessage(textInput.value));
 textInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleUserMessage(textInput.value); });
 
-voiceToggle.addEventListener('click', () => {
-  ttsEnabled = !ttsEnabled;
-  voiceToggle.classList.toggle('on', ttsEnabled);
-  if (!ttsEnabled) window.speechSynthesis.cancel();
-});
-
-speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
-
 // ── Init ─────────────────────────────────────────────────────────
 // WebGPU detection — disable the button if unsupported, default to it when available
 if (!webgpuSupported) {
@@ -810,6 +1176,13 @@ if (!webgpuSupported) {
   setDevice('webgpu');
 }
 refreshModelUI();
+
+// Restore last-used Vosk model URL so the user doesn't retype between reloads
+voskUrlInput.value = localStorage.getItem('voskModelUrl') || '';
+voskUrlInput.addEventListener('change', () => {
+  localStorage.setItem('voskModelUrl', voskUrlInput.value.trim());
+});
+
 setMode('webkit');
 setStatus('idle', 'ready');
 </script>
