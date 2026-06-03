@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voice Chatbot Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0c10;
+    --surface: #111318;
+    --border: #1e2229;
+    --accent: #00e5ff;
+    --accent2: #7c4dff;
+    --text: #e8eaf0;
+    --muted: #4a5060;
+    --user-bg: #0d1f2d;
+    --bot-bg: #13101f;
+    --danger: #ff3d6b;
+    --success: #00e5a0;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px;
+    background-image:
+      radial-gradient(ellipse 60% 40% at 70% 10%, rgba(0,229,255,0.04) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 50% at 20% 80%, rgba(124,77,255,0.05) 0%, transparent 60%);
+  }
+
+  header {
+    width: 100%;
+    max-width: 680px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  header h1 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 1.4rem;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  header .tag {
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid rgba(0,229,255,0.3);
+    padding: 2px 8px;
+    border-radius: 2px;
+  }
+
+  .status-bar {
+    width: 100%;
+    max-width: 680px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    height: 28px;
+  }
+
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.3s, box-shadow 0.3s;
+    flex-shrink: 0;
+  }
+  .status-dot.listening { background: var(--danger); box-shadow: 0 0 8px var(--danger); animation: pulse 1s infinite; }
+  .status-dot.speaking { background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: pulse 1.4s infinite; }
+  .status-dot.idle { background: var(--success); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .status-text {
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transition: color 0.3s;
+  }
+
+  .interim-text {
+    font-size: 0.7rem;
+    color: var(--accent);
+    opacity: 0.7;
+    font-style: italic;
+    margin-left: auto;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .chat-window {
+    width: 100%;
+    max-width: 680px;
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    min-height: 400px;
+    max-height: 55vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    scroll-behavior: smooth;
+  }
+
+  .chat-window::-webkit-scrollbar { width: 4px; }
+  .chat-window::-webkit-scrollbar-track { background: transparent; }
+  .chat-window::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .message {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    animation: slideIn 0.2s ease-out;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .message.user { align-items: flex-end; }
+  .message.bot { align-items: flex-start; }
+
+  .message-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .message-bubble {
+    max-width: 80%;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    line-height: 1.6;
+  }
+
+  .message.user .message-bubble {
+    background: var(--user-bg);
+    border: 1px solid rgba(0,229,255,0.15);
+    color: var(--text);
+    border-bottom-right-radius: 2px;
+  }
+
+  .message.bot .message-bubble {
+    background: var(--bot-bg);
+    border: 1px solid rgba(124,77,255,0.2);
+    color: var(--text);
+    border-bottom-left-radius: 2px;
+  }
+
+  .controls {
+    width: 100%;
+    max-width: 680px;
+    margin-top: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .mic-btn {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .mic-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,229,255,0.15) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .mic-btn:hover::before { opacity: 1; }
+  .mic-btn:hover { border-color: var(--accent); }
+
+  .mic-btn.active {
+    border-color: var(--danger);
+    background: rgba(255,61,107,0.08);
+    animation: ringPulse 1s infinite;
+  }
+
+  @keyframes ringPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,61,107,0.4); }
+    50% { box-shadow: 0 0 0 10px rgba(255,61,107,0); }
+  }
+
+  .mic-btn svg { width: 22px; height: 22px; transition: all 0.2s; }
+  .mic-btn.active svg { stroke: var(--danger); }
+
+  .input-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+
+  .input-wrap:focus-within { border-color: rgba(0,229,255,0.3); }
+
+  .text-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    padding: 14px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    color: var(--text);
+    caret-color: var(--accent);
+  }
+
+  .text-input::placeholder { color: var(--muted); }
+
+  .send-btn {
+    background: transparent;
+    border: none;
+    border-left: 1px solid var(--border);
+    padding: 0 16px;
+    height: 100%;
+    cursor: pointer;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    transition: color 0.2s, background 0.2s;
+  }
+  .send-btn:hover { color: var(--accent); background: rgba(0,229,255,0.05); }
+  .send-btn svg { width: 18px; height: 18px; }
+
+  .voice-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .toggle-switch {
+    width: 32px;
+    height: 18px;
+    background: var(--border);
+    border-radius: 9px;
+    position: relative;
+    transition: background 0.2s;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .toggle-switch.on { background: rgba(0,229,255,0.3); }
+
+  .toggle-switch::after {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: var(--muted);
+    border-radius: 50%;
+    top: 3px;
+    left: 3px;
+    transition: transform 0.2s, background 0.2s;
+  }
+
+  .toggle-switch.on::after { transform: translateX(14px); background: var(--accent); }
+
+  .footer-row {
+    width: 100%;
+    max-width: 680px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 10px;
+    padding: 0 2px;
+  }
+
+  .browser-note {
+    font-size: 0.62rem;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  .no-support {
+    color: var(--danger);
+    font-size: 0.75rem;
+    padding: 12px;
+    border: 1px solid rgba(255,61,107,0.3);
+    border-radius: 6px;
+    background: rgba(255,61,107,0.05);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>VoiceBot</h1>
+  <span class="tag">Demo</span>
+</header>
+
+<div class="status-bar">
+  <div class="status-dot idle" id="statusDot"></div>
+  <span class="status-text" id="statusText">ready</span>
+  <span class="interim-text" id="interimText"></span>
+</div>
+
+<div class="chat-window" id="chatWindow">
+  <div class="message bot">
+    <span class="message-label">assistant</span>
+    <div class="message-bubble">Привіт! Я ваш голосовий асистент. Натисніть на мікрофон або введіть повідомлення. Відповідатиму текстом і голосом.</div>
+  </div>
+</div>
+
+<div class="controls">
+  <button class="mic-btn" id="micBtn" title="Hold to speak">
+    <svg id="micIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+      <line x1="12" y1="19" x2="12" y2="23"/>
+      <line x1="8" y1="23" x2="16" y2="23"/>
+    </svg>
+  </button>
+
+  <div class="input-wrap">
+    <input class="text-input" id="textInput" type="text" placeholder="Type a message...">
+    <button class="send-btn" id="sendBtn">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"/>
+        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<div class="footer-row">
+  <span class="browser-note" id="browserNote">Chrome/Edge recommended for STT</span>
+  <label class="voice-toggle">
+    <div class="toggle-switch on" id="voiceToggle"></div>
+    TTS
+  </label>
+</div>
+
+<script>
+// ── Hardcoded bot responses ──────────────────────────────────────
+const RESPONSES = [
+  "Вітаю! Я отримав ваше повідомлення. У реальному сценарії це пішло б до вашого LLM API.",
+  "Цікаво! Цей демо використовує Web Speech API як для розпізнавання мови, так і для відтворення.",
+  "Гарне питання. Розпізнавання обробляється браузером — Safari використовує сервери Apple.",
+  "Ви можете замінити цю відповідь будь-яким fetch() запитом до вашого бекенду чатботу.",
+  "Озвучення повністю локальне — голоси встановлені на вашій ОС, мережевих запитів немає.",
+  "Хочете режим вільних рук? Можна налаштувати автоматичний перезапуск мікрофона після відповіді.",
+  "Цей підхід добре підходить для ботів підтримки клієнтів — голосовий шар це тонка обгортка над API.",
+];
+let responseIndex = 0;
+const getResponse = () => RESPONSES[responseIndex++ % RESPONSES.length];
+
+// ── State ────────────────────────────────────────────────────────
+let isListening = false;
+let isSpeaking = false;
+let ttsEnabled = true;
+let recognition = null;
+
+// ── DOM refs ─────────────────────────────────────────────────────
+const chatWindow = document.getElementById('chatWindow');
+const micBtn     = document.getElementById('micBtn');
+const textInput  = document.getElementById('textInput');
+const sendBtn    = document.getElementById('sendBtn');
+const statusDot  = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+const interimEl  = document.getElementById('interimText');
+const voiceToggle = document.getElementById('voiceToggle');
+const browserNote = document.getElementById('browserNote');
+
+// ── UI helpers ───────────────────────────────────────────────────
+function setStatus(state, label) {
+  statusDot.className = 'status-dot ' + state;
+  statusText.textContent = label;
+}
+
+function addMessage(text, role) {
+  const wrap = document.createElement('div');
+  wrap.className = 'message ' + role;
+  wrap.innerHTML = `<span class="message-label">${role === 'user' ? 'you' : 'assistant'}</span>
+    <div class="message-bubble">${text}</div>`;
+  chatWindow.appendChild(wrap);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+// ── TTS ──────────────────────────────────────────────────────────
+function speak(text, onEnd) {
+  if (!ttsEnabled || !window.speechSynthesis) { onEnd && onEnd(); return; }
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.lang = 'uk-UA';
+  utt.rate = 1.0;
+  utt.pitch = 1.0;
+
+  // Pick a decent voice if available
+  const voices = speechSynthesis.getVoices();
+  const preferred = voices.find(v => v.lang === 'uk-UA' || v.lang === 'uk')
+    || voices.find(v => v.name.toLowerCase().includes('ukrain'));
+  if (preferred) utt.voice = preferred;
+
+  utt.onstart = () => { isSpeaking = true; setStatus('speaking', 'speaking'); };
+  utt.onend = () => { isSpeaking = false; setStatus('idle', 'ready'); onEnd && onEnd(); };
+  utt.onerror = () => { isSpeaking = false; setStatus('idle', 'ready'); onEnd && onEnd(); };
+  speechSynthesis.speak(utt);
+}
+
+// ── Bot response handler ─────────────────────────────────────────
+function handleUserMessage(text) {
+  if (!text.trim()) return;
+  addMessage(text, 'user');
+  textInput.value = '';
+  interimEl.textContent = '';
+
+  // Simulate slight delay
+  setTimeout(() => {
+    const reply = getResponse();
+    addMessage(reply, 'bot');
+    speak(reply);
+  }, 300);
+}
+
+// ── Browser detection ────────────────────────────────────────────
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+// ── STT setup ───────────────────────────────────────────────────
+// Safari quirks:
+// 1. interimResults often breaks or returns nothing — disable it
+// 2. recognition object must be recreated each session (reuse causes silent failure)
+// 3. .start() must be called synchronously inside a user gesture (no await/setTimeout before it)
+// 4. iOS needs AudioContext unlocked first
+
+let audioCtxUnlocked = false;
+
+function unlockAudioContext() {
+  if (audioCtxUnlocked || !isIOS) return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const buf = ctx.createBuffer(1, 1, 22050);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start(0);
+    audioCtxUnlocked = true;
+  } catch(e) {}
+}
+
+function buildRecognition() {
+  if (!SR) return null;
+  const r = new SR();
+  r.lang = 'uk-UA'; // change to 'en-US' if preferred
+  r.continuous = false;
+  // Safari: interimResults is unreliable — disable on Safari
+  r.interimResults = !isSafari;
+  r.maxAlternatives = 1;
+  return r;
+}
+
+function initSTT() {
+  if (!SR) {
+    browserNote.textContent = '⚠ STT not supported in this browser';
+    browserNote.style.color = 'var(--danger)';
+    micBtn.disabled = true;
+    micBtn.style.opacity = '0.4';
+    return;
+  }
+  if (isSafari) {
+    browserNote.textContent = 'Safari mode — no interim text, final result only';
+    browserNote.style.color = 'rgba(0,229,255,0.6)';
+  }
+}
+
+function startListening() {
+  // Safari: must recreate recognition object each time
+  recognition = buildRecognition();
+  if (!recognition || isListening || isSpeaking) return;
+
+  // iOS: unlock AudioContext synchronously in gesture
+  unlockAudioContext();
+
+  recognition.onstart = () => {
+    isListening = true;
+    micBtn.classList.add('active');
+    setStatus('listening', 'listening...');
+  };
+
+  recognition.onresult = (e) => {
+    let interim = '';
+    let final = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) final += t;
+      else interim += t;
+    }
+    // On Safari interim is empty — show final as it arrives
+    interimEl.textContent = interim || final;
+    if (final) {
+      textInput.value = final;
+      stopListening();
+      handleUserMessage(final);
+    }
+  };
+
+  recognition.onerror = (e) => {
+    console.warn('STT error:', e.error, e.message);
+    isListening = false;
+    micBtn.classList.remove('active');
+    if (e.error === 'not-allowed') {
+      setStatus('idle', 'mic blocked');
+      browserNote.textContent = '⚠ Mic access denied — check Safari settings';
+      browserNote.style.color = 'var(--danger)';
+    } else if (e.error === 'no-speech') {
+      setStatus('idle', 'no speech detected');
+    } else {
+      setStatus('idle', 'ready');
+    }
+  };
+
+  recognition.onend = () => {
+    isListening = false;
+    micBtn.classList.remove('active');
+    interimEl.textContent = '';
+    if (!isSpeaking) setStatus('idle', 'ready');
+    // Safari sometimes fires onend without onresult — check if we got something
+    // via textInput which was set in onresult
+  };
+
+  // CRITICAL for Safari: .start() must be synchronous here, no async gap
+  try {
+    recognition.start();
+  } catch(e) {
+    console.warn('recognition.start() failed:', e);
+    setStatus('idle', 'ready');
+  }
+}
+
+function stopListening() {
+  if (recognition && isListening) {
+    try { recognition.stop(); } catch(e) {}
+  }
+}
+
+// ── Events ───────────────────────────────────────────────────────
+micBtn.addEventListener('click', () => {
+  if (isListening) stopListening();
+  else startListening();
+});
+
+sendBtn.addEventListener('click', () => handleUserMessage(textInput.value));
+
+textInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') handleUserMessage(textInput.value);
+});
+
+voiceToggle.addEventListener('click', () => {
+  ttsEnabled = !ttsEnabled;
+  voiceToggle.classList.toggle('on', ttsEnabled);
+  if (!ttsEnabled) window.speechSynthesis.cancel();
+});
+
+// Voices load async in some browsers
+speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+
+// ── Init ─────────────────────────────────────────────────────────
+initSTT();
+setStatus('idle', 'ready');
+</script>
+</body>
+</html>
